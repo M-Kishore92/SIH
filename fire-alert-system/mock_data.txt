@@ -1,0 +1,59 @@
+[Warm-up] MQ-2 stabilizing heater... 60s remaining
+[Warm-up] MQ-2 stabilizing heater... 55s remaining
+[Warm-up] MQ-2 stabilizing heater... 50s remaining
+[Warm-up] MQ-2 stabilizing heater... 45s remaining
+[Warm-up] MQ-2 stabilizing heater... 40s remaining
+[Warm-up] MQ-2 stabilizing heater... 35s remaining
+[Warm-up] MQ-2 stabilizing heater... 30s remaining
+[Warm-up] MQ-2 stabilizing heater... 25s remaining
+[Warm-up] MQ-2 stabilizing heater... 20s remaining
+[Warm-up] MQ-2 stabilizing heater... 15s remaining
+[Warm-up] MQ-2 stabilizing heater... 10s remaining
+[Warm-up] MQ-2 stabilizing heater... 5s remaining
+[Calibrating] Establishing baseline... 110s remaining
+[Calibrating] Establishing baseline... 100s remaining
+[Calibrating] Establishing baseline... 90s remaining
+[Calibrating] Establishing baseline... 80s remaining
+[Calibrating] Establishing baseline... 70s remaining
+[Calibrating] Establishing baseline... 60s remaining
+[Calibrating] Establishing baseline... 50s remaining
+[Calibrating] Establishing baseline... 40s remaining
+[Calibrating] Establishing baseline... 30s remaining
+[Calibrating] Establishing baseline... 20s remaining
+[Calibrating] Establishing baseline... 10s remaining
+[Calibrating] Baseline calibration complete!
+   Baseline MQ-2    : 282.4
+   MQ-2 StdDev (σ)  : 18.50
+   Fire Threshold Δ : +92.5 (triggers when MQ2 >= 374.9)
+   Baseline Temp    : 32.8 C
+Temp=33.2C | Hum=58.0% | MQ2=295 (Baseline=282, Delta=+13) | TempRate=+0.00 | MQ2Rate=+1.79 | Prediction=NOT FIRE | Confidence=100%
+Temp=33.3C | Hum=57.8% | MQ2=298 (Baseline=282, Delta=+16) | TempRate=+0.01 | MQ2Rate=+2.10 | Prediction=NOT FIRE | Confidence=100%
+Temp=33.3C | Hum=57.5% | MQ2=300 (Baseline=282, Delta=+18) | TempRate=+0.00 | MQ2Rate=+1.50 | Prediction=NOT FIRE | Confidence=98%
+Temp=33.4C | Hum=57.2% | MQ2=305 (Baseline=282, Delta=+23) | TempRate=+0.01 | MQ2Rate=+3.20 | Prediction=NOT FIRE | Confidence=97%
+Temp=33.5C | Hum=57.0% | MQ2=312 (Baseline=282, Delta=+30) | TempRate=+0.01 | MQ2Rate=+4.50 | Prediction=NOT FIRE | Confidence=95%
+Temp=33.7C | Hum=56.8% | MQ2=320 (Baseline=282, Delta=+38) | TempRate=+0.02 | MQ2Rate=+5.80 | Prediction=NOT FIRE | Confidence=93%
+Temp=33.9C | Hum=56.5% | MQ2=335 (Baseline=282, Delta=+53) | TempRate=+0.02 | MQ2Rate=+8.20 | Prediction=NOT FIRE | Confidence=90%
+Temp=34.1C | Hum=56.2% | MQ2=355 (Baseline=282, Delta=+73) | TempRate=+0.02 | MQ2Rate=+11.00 | Prediction=NOT FIRE | Confidence=87%
+Temp=34.2C | Hum=56.1% | MQ2=365 (Baseline=282, Delta=+83) | TempRate=+0.01 | MQ2Rate=+12.00 | Prediction=FIRE | Confidence=72%
+  └─ [SAFETY] Model flagged FIRE but MQ2 is within calibrated baseline - suppressed as likely false positive
+Temp=34.2C | Hum=56.0% | MQ2=370 (Baseline=282, Delta=+88) | TempRate=+0.00 | MQ2Rate=+12.50 | Prediction=NOT FIRE | Confidence=88%
+Temp=34.3C | Hum=56.0% | MQ2=390 (Baseline=282, Delta=+108) | TempRate=+0.01 | MQ2Rate=+13.00 | Prediction=FIRE | Confidence=91%
+Temp=34.4C | Hum=55.8% | MQ2=410 (Baseline=282, Delta=+128) | TempRate=+0.01 | MQ2Rate=+13.50 | Prediction=FIRE | Confidence=95%
+Temp=34.5C | Hum=55.5% | MQ2=435 (Baseline=282, Delta=+153) | TempRate=+0.05 | MQ2Rate=+14.00 | Prediction=FIRE | Confidence=97%
+Temp=34.8C | Hum=55.2% | MQ2=470 (Baseline=282, Delta=+188) | TempRate=+0.10 | MQ2Rate=+14.84 | Prediction=FIRE | Confidence=100%
+Temp=35.0C | Hum=55.0% | MQ2=490 (Baseline=282, Delta=+208) | TempRate=+0.12 | MQ2Rate=+15.20 | Prediction=FIRE | Confidence=100%
+Temp=35.2C | Hum=54.8% | MQ2=510 (Baseline=282, Delta=+228) | TempRate=+0.10 | MQ2Rate=+15.50 | Prediction=FIRE | Confidence=100%
+Temp=35.5C | Hum=54.5% | MQ2=540 (Baseline=282, Delta=+258) | TempRate=+0.15 | MQ2Rate=+16.20 | Prediction=FIRE | Confidence=100%
+Temp=35.8C | Hum=54.0% | MQ2=580 (Baseline=282, Delta=+298) | TempRate=+0.20 | MQ2Rate=+17.10 | Prediction=FIRE | Confidence=100%
+Temp=36.0C | Hum=53.5% | MQ2=620 (Baseline=282, Delta=+338) | TempRate=+0.15 | MQ2Rate=+16.80 | Prediction=FIRE | Confidence=100%
+Temp=35.8C | Hum=53.8% | MQ2=590 (Baseline=282, Delta=+308) | TempRate=-0.10 | MQ2Rate=-14.00 | Prediction=FIRE | Confidence=100%
+Temp=35.5C | Hum=54.2% | MQ2=560 (Baseline=282, Delta=+278) | TempRate=-0.15 | MQ2Rate=-13.00 | Prediction=FIRE | Confidence=100%
+Temp=35.2C | Hum=54.8% | MQ2=530 (Baseline=282, Delta=+248) | TempRate=-0.15 | MQ2Rate=-12.00 | Prediction=FIRE | Confidence=100%
+Temp=34.9C | Hum=55.2% | MQ2=500 (Baseline=282, Delta=+218) | TempRate=-0.15 | MQ2Rate=-11.00 | Prediction=FIRE | Confidence=99%
+Temp=34.6C | Hum=55.8% | MQ2=460 (Baseline=282, Delta=+178) | TempRate=-0.15 | MQ2Rate=-10.00 | Prediction=FIRE | Confidence=97%
+Temp=34.3C | Hum=56.2% | MQ2=420 (Baseline=282, Delta=+138) | TempRate=-0.15 | MQ2Rate=-9.00 | Prediction=FIRE | Confidence=94%
+Temp=34.0C | Hum=56.8% | MQ2=380 (Baseline=282, Delta=+98) | TempRate=-0.15 | MQ2Rate=-8.00 | Prediction=NOT FIRE | Confidence=89%
+Temp=33.8C | Hum=57.2% | MQ2=340 (Baseline=282, Delta=+58) | TempRate=-0.10 | MQ2Rate=-7.00 | Prediction=NOT FIRE | Confidence=92%
+Temp=33.6C | Hum=57.5% | MQ2=315 (Baseline=282, Delta=+33) | TempRate=-0.10 | MQ2Rate=-6.00 | Prediction=NOT FIRE | Confidence=95%
+Temp=33.4C | Hum=57.8% | MQ2=302 (Baseline=282, Delta=+20) | TempRate=-0.05 | MQ2Rate=-4.00 | Prediction=NOT FIRE | Confidence=98%
+Temp=33.2C | Hum=58.0% | MQ2=293 (Baseline=282, Delta=+11) | TempRate=-0.05 | MQ2Rate=-2.00 | Prediction=NOT FIRE | Confidence=100%

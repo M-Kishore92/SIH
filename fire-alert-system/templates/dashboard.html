@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>🔥 PyroWatch — Real-Time Forest Fire Alert & Sensor Monitoring</title>
+  <meta name="description" content="Local AI-powered forest fire monitoring dashboard with live ESP32 serial telemetry, real-time Chart.js tracking, safety suppression diagnostics, and automated Twilio SMS dispatch.">
+
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+  <!-- Chart.js CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="/static/dashboard.css">
+</head>
+<body>
+  <!-- Ambient background glow layers -->
+  <div class="ambient-glow glow-1"></div>
+  <div class="ambient-glow glow-2"></div>
+
+  <!-- Top Navigation Bar -->
+  <header class="top-nav">
+    <div class="brand">
+      <div class="brand-icon-wrapper">
+        <i data-lucide="flame" class="brand-icon"></i>
+      </div>
+      <div class="brand-text">
+        <h1 class="brand-title">PyroWatch <span class="badge-tag">AI Edge</span></h1>
+        <p class="brand-subtitle">ESP32 Forest Fire Early Detection & SMS Dispatch</p>
+      </div>
+    </div>
+
+    <div class="header-actions">
+      <div id="connStatusBadge" class="badge badge-pulse badge-connected">
+        <span class="dot"></span>
+        <span id="connStatusText">SSE Connected</span>
+      </div>
+
+      <div id="systemModeBadge" class="badge badge-neutral">
+        <i data-lucide="cpu" class="icon-sm"></i>
+        <span id="systemModeText">Hardware Mode</span>
+      </div>
+
+      <button id="btnTestSMS" class="btn btn-secondary" title="Send a test SMS to verify Twilio configuration">
+        <i data-lucide="message-square" class="icon-sm"></i>
+        <span>Test SMS</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Main Dashboard Container -->
+  <main class="dashboard-container">
+
+    <!-- Phase / Warm-up / Calibration Banner (Shown dynamically when calibrating/warming up) -->
+    <section id="phaseBanner" class="phase-banner hidden">
+      <div class="phase-content">
+        <div class="phase-spinner"></div>
+        <div>
+          <h4 id="phaseTitle" class="phase-heading">Sensor Warming Up</h4>
+          <p id="phaseDesc" class="phase-sub">MQ-2 heater stabilizing baseline resistance...</p>
+        </div>
+      </div>
+      <div class="phase-progress-wrapper">
+        <div id="phaseProgressBar" class="phase-progress-bar" style="width: 50%;"></div>
+      </div>
+    </section>
+
+    <!-- Top Hero: Master Status & Vital Metrics -->
+    <section class="hero-grid">
+      <!-- Master Status Card -->
+      <div id="masterStatusCard" class="card status-card status-safe">
+        <div class="status-card-header">
+          <div class="status-indicator-ring">
+            <i id="statusIcon" data-lucide="shield-check" class="status-icon"></i>
+          </div>
+          <div class="status-meta">
+            <span class="status-label">CURRENT SYSTEM STATE</span>
+            <h2 id="statusHeadline" class="status-headline">NOT FIRE</h2>
+            <p id="statusSubtext" class="status-desc">All telemetry within calibrated baseline thresholds.</p>
+          </div>
+        </div>
+
+        <div class="status-footer">
+          <div class="status-stat">
+            <span class="stat-caption">Confidence</span>
+            <span id="statusConfidence" class="stat-number">100%</span>
+          </div>
+          <div class="status-stat">
+            <span class="stat-caption">Active Phase</span>
+            <span id="statusPhaseName" class="stat-number">Monitoring</span>
+          </div>
+          <div class="status-stat">
+            <span class="stat-caption">Last Sync</span>
+            <span id="statusLastSync" class="stat-number">Just now</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick Metrics Grid -->
+      <div class="metrics-grid">
+        <!-- Temp Card -->
+        <div class="card metric-card">
+          <div class="metric-top">
+            <span class="metric-title">Temperature</span>
+            <div class="icon-box icon-orange"><i data-lucide="thermometer"></i></div>
+          </div>
+          <div class="metric-value-wrapper">
+            <span id="valTemp" class="metric-value">--.-</span>
+            <span class="metric-unit">°C</span>
+          </div>
+          <div class="metric-footer">
+            <span class="rate-badge" id="valTempRate">Rate: +0.00°C/s</span>
+            <span class="baseline-note" id="noteBaseTemp">Base: --.-°C</span>
+          </div>
+        </div>
+
+        <!-- Humidity Card -->
+        <div class="card metric-card">
+          <div class="metric-top">
+            <span class="metric-title">Humidity</span>
+            <div class="icon-box icon-blue"><i data-lucide="droplets"></i></div>
+          </div>
+          <div class="metric-value-wrapper">
+            <span id="valHum" class="metric-value">--.-</span>
+            <span class="metric-unit">%</span>
+          </div>
+          <div class="metric-footer">
+            <span class="status-note">Relative Humidity</span>
+          </div>
+        </div>
+
+        <!-- MQ-2 Gas Level Card -->
+        <div class="card metric-card">
+          <div class="metric-top">
+            <span class="metric-title">MQ-2 Smoke / Gas</span>
+            <div class="icon-box icon-purple"><i data-lucide="wind"></i></div>
+          </div>
+          <div class="metric-value-wrapper">
+            <span id="valMQ2" class="metric-value">---</span>
+            <span class="metric-unit">ADC</span>
+          </div>
+          <div class="metric-footer">
+            <span class="rate-badge" id="valMQ2Rate">Rate: +0.00/s</span>
+            <span class="delta-badge" id="valDelta">Δ: +0</span>
+          </div>
+        </div>
+
+        <!-- SMS Alert Dispatch Card -->
+        <div class="card metric-card">
+          <div class="metric-top">
+            <span class="metric-title">Twilio Alert Gateway</span>
+            <div class="icon-box icon-red"><i data-lucide="send"></i></div>
+          </div>
+          <div class="metric-value-wrapper">
+            <span id="smsGatewayStatus" class="metric-value metric-value-sm">ARMED</span>
+          </div>
+          <div class="metric-footer">
+            <span id="smsDebounceLabel" class="status-note">Debounce: 120s / on state change</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Calibration Info & Chart Section -->
+    <section class="main-body-grid">
+      <!-- Live Telemetry Graph -->
+      <div class="card chart-card">
+        <div class="card-header">
+          <div class="card-heading-group">
+            <h3 class="card-title"><i data-lucide="activity" class="icon-sm"></i> Live Telemetry Stream</h3>
+            <p class="card-sub">Real-time MQ-2 smoke sensor response vs. ambient temperature curve</p>
+          </div>
+          <div class="chart-controls">
+            <span class="live-pulse-dot"></span>
+            <span class="text-muted text-xs">Live Updating</span>
+          </div>
+        </div>
+        <div class="chart-wrapper">
+          <canvas id="telemetryChart"></canvas>
+        </div>
+      </div>
+
+      <!-- Calibration Parameters Panel -->
+      <div class="card calibration-card">
+        <div class="card-header">
+          <div class="card-heading-group">
+            <h3 class="card-title"><i data-lucide="sliders" class="icon-sm"></i> Calibration Profile</h3>
+            <p class="card-sub">Dynamic baseline and threshold margins set by firmware</p>
+          </div>
+        </div>
+
+        <div class="calibration-list">
+          <div class="cal-row">
+            <div class="cal-info">
+              <span class="cal-label">Baseline MQ-2</span>
+              <span class="cal-sub">Clean air ambient resistance baseline</span>
+            </div>
+            <div class="cal-badge" id="calBaseMQ2">--.-</div>
+          </div>
+
+          <div class="cal-row">
+            <div class="cal-info">
+              <span class="cal-label">MQ-2 StdDev (σ)</span>
+              <span class="cal-sub">Sensor noise standard deviation</span>
+            </div>
+            <div class="cal-badge" id="calStdDev">--.-</div>
+          </div>
+
+          <div class="cal-row">
+            <div class="cal-info">
+              <span class="cal-label">Fire Threshold Δ</span>
+              <span class="cal-sub">Required deviation above baseline to alarm</span>
+            </div>
+            <div class="cal-badge cal-badge-warning" id="calThresholdDelta">--.-</div>
+          </div>
+
+          <div class="cal-row">
+            <div class="cal-info">
+              <span class="cal-label">Trigger Level (Target MQ2)</span>
+              <span class="cal-sub">Threshold cut-off value: Baseline + Δ</span>
+            </div>
+            <div class="cal-badge cal-badge-danger" id="calTriggerLevel">--.-</div>
+          </div>
+
+          <div class="cal-row">
+            <div class="cal-info">
+              <span class="cal-label">Baseline Temperature</span>
+              <span class="cal-sub">Ambient thermal reference</span>
+            </div>
+            <div class="cal-badge" id="calBaseTemp">--.- °C</div>
+          </div>
+
+          <div class="cal-row">
+            <div class="cal-info">
+              <span class="cal-label">Calibrated At</span>
+              <span class="cal-sub">Timestamp of baseline lock</span>
+            </div>
+            <div class="cal-badge text-mono" id="calTime">Awaiting lock</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Alert Log Table Section -->
+    <section class="card table-card">
+      <div class="card-header">
+        <div class="card-heading-group">
+          <h3 class="card-title"><i data-lucide="history" class="icon-sm"></i> Real-Time Telemetry & Alert Log</h3>
+          <p class="card-sub">Complete chronological feed of all parsed ESP32 frames with safety diagnostics</p>
+        </div>
+        <div class="table-legend">
+          <span class="legend-item"><span class="legend-chip chip-fire"></span> Fire Alarm</span>
+          <span class="legend-item"><span class="legend-chip chip-suppressed"></span> Safety Near-Miss</span>
+          <span class="legend-item"><span class="legend-chip chip-normal"></span> Normal</span>
+        </div>
+      </div>
+
+      <div class="table-wrapper">
+        <table id="eventsTable">
+          <thead>
+            <tr>
+              <th>Timestamp</th>
+              <th>Prediction</th>
+              <th>Confidence</th>
+              <th>MQ-2 Level</th>
+              <th>Delta (Δ)</th>
+              <th>Temp (°C)</th>
+              <th>Humidity</th>
+              <th>MQ-2 Rate</th>
+              <th>Temp Rate</th>
+              <th>Safety Note</th>
+            </tr>
+          </thead>
+          <tbody id="eventsTableBody">
+            <tr class="empty-row">
+              <td colspan="10">Waiting for live events from ESP32...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Notification Toast Container -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- Application Logic -->
+  <script src="/static/dashboard.js"></script>
+</body>
+</html>
