@@ -71,13 +71,14 @@ _RE_BASELINE_TEMP = re.compile(
 _RE_READING = re.compile(
     r"Temp=([+-]?[\d.]+)C"
     r"\s*\|\s*Hum=([+-]?[\d.]+)%"
-    r"\s*\|\s*MQ2=([\d.]+)\s*\(Baseline=([\d.]+),\s*Delta=([+-]?[\d.]+)\)"
+    r"\s*\|\s*MQ2=([\d.]+)(?:\s*\(Baseline=([\d.]+),\s*Delta=([+-]?[\d.]+)\))?"
     r"\s*\|\s*TempRate=([+-]?[\d.]+)"
     r"\s*\|\s*MQ2Rate=([+-]?[\d.]+)"
     r"\s*\|\s*Prediction=(FIRE|NOT FIRE)"
     r"\s*\|\s*Confidence=([\d.]+)%",
     re.IGNORECASE,
 )
+
 
 # Pattern 4 — Safety-suppression note (follows immediately after a FIRE line)
 _RE_SAFETY = re.compile(
@@ -206,6 +207,8 @@ def parse_line(raw_line: str) -> dict | None:
     # ---- Normal sensor reading ----------------------------------------
     m = _RE_READING.search(line)
     if m:
+        base_val = float(m.group(4)) if m.group(4) is not None else 0.0
+        delta_val = float(m.group(5)) if m.group(5) is not None else 0.0
         return {
             "type": "reading",
             "timestamp": now,
@@ -213,8 +216,8 @@ def parse_line(raw_line: str) -> dict | None:
             "temp": float(m.group(1)),
             "humidity": float(m.group(2)),
             "mq2": float(m.group(3)),
-            "baseline": float(m.group(4)),
-            "delta": float(m.group(5)),
+            "baseline": base_val,
+            "delta": delta_val,
             "temp_rate": float(m.group(6)),
             "mq2_rate": float(m.group(7)),
             "prediction": m.group(8).upper(),          # "FIRE" or "NOT FIRE"

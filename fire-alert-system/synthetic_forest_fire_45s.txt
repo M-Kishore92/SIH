@@ -1,0 +1,45 @@
+Temp=33.0C | Hum=58.5% | MQ2=220 | TempRate=+0.00 | MQ2Rate=+0.12 | Prediction=NOT FIRE | Confidence=100%
+Temp=33.0C | Hum=58.4% | MQ2=222 | TempRate=+0.00 | MQ2Rate=+0.18 | Prediction=NOT FIRE | Confidence=100%
+Temp=33.1C | Hum=58.2% | MQ2=225 | TempRate=+0.01 | MQ2Rate=+0.30 | Prediction=NOT FIRE | Confidence=100%
+Temp=33.1C | Hum=58.1% | MQ2=230 | TempRate=+0.00 | MQ2Rate=+0.45 | Prediction=NOT FIRE | Confidence=98%
+Temp=33.1C | Hum=58.1% | MQ2=238 | TempRate=+0.00 | MQ2Rate=+0.80 | Prediction=NOT FIRE | Confidence=96%
+Temp=33.2C | Hum=58.0% | MQ2=248 | TempRate=+0.01 | MQ2Rate=+1.20 | Prediction=NOT FIRE | Confidence=94%
+Temp=33.2C | Hum=58.0% | MQ2=270 | TempRate=+0.00 | MQ2Rate=-6.10 | Prediction=FIRE | Confidence=93%
+Temp=33.2C | Hum=58.0% | MQ2=270 | TempRate=+0.00 | MQ2Rate=-4.70 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=263 | TempRate=+0.00 | MQ2Rate=-3.96 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=265 | TempRate=+0.00 | MQ2Rate=-3.28 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=260 | TempRate=+0.00 | MQ2Rate=-3.09 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=258 | TempRate=+0.00 | MQ2Rate=-3.07 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=252 | TempRate=+0.00 | MQ2Rate=-2.99 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=313 | TempRate=+0.00 | MQ2Rate=+0.76 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=311 | TempRate=+0.00 | MQ2Rate=+3.76 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=338 | TempRate=+0.00 | MQ2Rate=+7.82 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=352 | TempRate=+0.00 | MQ2Rate=+12.11 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=337 | TempRate=+0.00 | MQ2Rate=+10.59 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=341 | TempRate=+0.00 | MQ2Rate=+9.81 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=340 | TempRate=+0.00 | MQ2Rate=+7.49 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=340 | TempRate=+0.00 | MQ2Rate=+4.86 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=342 | TempRate=+0.00 | MQ2Rate=+3.96 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=345 | TempRate=+0.00 | MQ2Rate=+3.22 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=344 | TempRate=+0.00 | MQ2Rate=+2.67 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=341 | TempRate=+0.00 | MQ2Rate=+2.06 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=341 | TempRate=+0.00 | MQ2Rate=+1.48 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=343 | TempRate=+0.00 | MQ2Rate=+0.99 | Prediction=FIRE | Confidence=100%
+Temp=33.2C | Hum=58.0% | MQ2=347 | TempRate=+0.00 | MQ2Rate=+0.93 | Prediction=FIRE | Confidence=100%
+Temp=33.5C | Hum=57.8% | MQ2=365 | TempRate=+0.03 | MQ2Rate=+3.40 | Prediction=FIRE | Confidence=100%
+Temp=33.8C | Hum=57.5% | MQ2=388 | TempRate=+0.05 | MQ2Rate=+5.80 | Prediction=FIRE | Confidence=100%
+Temp=34.1C | Hum=57.1% | MQ2=415 | TempRate=+0.08 | MQ2Rate=+8.90 | Prediction=FIRE | Confidence=100%
+Temp=34.5C | Hum=56.8% | MQ2=440 | TempRate=+0.10 | MQ2Rate=+11.20 | Prediction=FIRE | Confidence=100%
+Temp=35.0C | Hum=56.2% | MQ2=485 | TempRate=+0.14 | MQ2Rate=+14.50 | Prediction=FIRE | Confidence=100%
+Temp=35.4C | Hum=55.8% | MQ2=520 | TempRate=+0.16 | MQ2Rate=+15.80 | Prediction=FIRE | Confidence=100%
+Temp=35.8C | Hum=55.2% | MQ2=555 | TempRate=+0.15 | MQ2Rate=+14.20 | Prediction=FIRE | Confidence=100%
+Temp=35.9C | Hum=55.0% | MQ2=540 | TempRate=+0.08 | MQ2Rate=+7.10 | Prediction=FIRE | Confidence=100%
+Temp=35.6C | Hum=55.4% | MQ2=490 | TempRate=-0.05 | MQ2Rate=-9.80 | Prediction=FIRE | Confidence=100%
+Temp=35.1C | Hum=55.9% | MQ2=430 | TempRate=-0.12 | MQ2Rate=-14.20 | Prediction=FIRE | Confidence=99%
+Temp=34.7C | Hum=56.4% | MQ2=375 | TempRate=-0.15 | MQ2Rate=-15.60 | Prediction=FIRE | Confidence=97%
+Temp=34.2C | Hum=57.0% | MQ2=320 | TempRate=-0.15 | MQ2Rate=-14.00 | Prediction=FIRE | Confidence=91%
+Temp=33.8C | Hum=57.4% | MQ2=285 | TempRate=-0.12 | MQ2Rate=-10.50 | Prediction=NOT FIRE | Confidence=92%
+Temp=33.5C | Hum=57.8% | MQ2=260 | TempRate=-0.08 | MQ2Rate=-7.20 | Prediction=NOT FIRE | Confidence=95%
+Temp=33.3C | Hum=58.0% | MQ2=242 | TempRate=-0.05 | MQ2Rate=-4.80 | Prediction=NOT FIRE | Confidence=98%
+Temp=33.1C | Hum=58.2% | MQ2=230 | TempRate=-0.03 | MQ2Rate=-2.40 | Prediction=NOT FIRE | Confidence=100%
+Temp=33.0C | Hum=58.4% | MQ2=222 | TempRate=-0.01 | MQ2Rate=-0.80 | Prediction=NOT FIRE | Confidence=100%

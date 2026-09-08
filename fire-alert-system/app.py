@@ -315,10 +315,17 @@ def main():
     parser.add_argument(
         "--mock",
         action="store_true",
-        help="Run in mock replay mode using mock_data.txt without physical ESP32",
+        help="Run in mock replay mode using mock data without physical ESP32",
+    )
+    parser.add_argument(
+        "--mock-file",
+        type=str,
+        default=config.MOCK_REPLAY_FILE,
+        help=f"File path for mock replay (default: {config.MOCK_REPLAY_FILE})",
     )
     parser.add_argument(
         "--port",
+
         type=int,
         default=config.FLASK_PORT,
         help=f"Port to run Flask web server (default: {config.FLASK_PORT})",
@@ -350,13 +357,14 @@ def main():
     # 3. Start Serial Reader or Mock Reader
     if args.mock:
         system_state["mode"] = "mock"
-        log.info(">>> RUNNING IN MOCK / DEMO MODE (replaying mock_data.txt) <<<")
+        log.info(f">>> RUNNING IN MOCK / DEMO MODE (replaying {args.mock_file}) <<<")
         reader = MockSerialReader(
-            mock_file=config.MOCK_REPLAY_FILE,
+            mock_file=args.mock_file,
             event_queue=event_queue,
             delay=config.MOCK_LINE_DELAY_SECONDS,
             loop_forever=True,
         )
+
     else:
         system_state["mode"] = "hardware"
         log.info(f">>> RUNNING IN HARDWARE SERIAL MODE ({args.serial_port} @ {config.BAUD_RATE} baud) <<<")
