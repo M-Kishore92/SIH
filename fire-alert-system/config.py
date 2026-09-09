@@ -35,16 +35,26 @@ DATABASE_PATH: str = os.getenv("DATABASE_PATH", "fire_alerts.db")
 # ---------------------------------------------------------------------------
 # Twilio credentials  (loaded from .env — do NOT hard-code here)
 # ---------------------------------------------------------------------------
-TWILIO_ACCOUNT_SID: str  = os.getenv("TWILIO_ACCOUNT_SID", "")
-TWILIO_AUTH_TOKEN: str   = os.getenv("TWILIO_AUTH_TOKEN", "")
-TWILIO_FROM_NUMBER: str  = os.getenv("TWILIO_FROM_NUMBER", "")
-TWILIO_TO_NUMBER: str    = os.getenv("TWILIO_TO_NUMBER", "")
+TWILIO_ACCOUNT_SID: str    = os.getenv("TWILIO_ACCOUNT_SID", "")
+TWILIO_AUTH_TOKEN: str     = os.getenv("TWILIO_AUTH_TOKEN", "")
+TWILIO_API_KEY_SID: str    = os.getenv("TWILIO_API_KEY_SID", "")
+TWILIO_API_KEY_SECRET: str = os.getenv("TWILIO_API_KEY_SECRET", "")
+TWILIO_FROM_NUMBER: str    = os.getenv("TWILIO_FROM_NUMBER", "")
+TWILIO_TO_NUMBER: str      = os.getenv("TWILIO_TO_NUMBER", "")
 
 # ---------------------------------------------------------------------------
-# SMS debounce — only resend if this many seconds have passed OR prediction
-# just transitioned from NOT FIRE → FIRE
+# Alert Channel: "whatsapp" (free sandbox) or "sms" (cellular) or "both"
 # ---------------------------------------------------------------------------
-SMS_DEBOUNCE_SECONDS: int = int(os.getenv("SMS_DEBOUNCE_SECONDS", "120"))
+ALERT_CHANNEL: str         = os.getenv("ALERT_CHANNEL", "whatsapp").lower()
+TWILIO_WHATSAPP_FROM: str  = os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+14155238886")
+
+# ---------------------------------------------------------------------------
+# SMS debounce & limits
+# ---------------------------------------------------------------------------
+SMS_DEBOUNCE_SECONDS: int  = int(os.getenv("SMS_DEBOUNCE_SECONDS", "120"))
+SMS_SEND_ONCE: bool         = os.getenv("SMS_SEND_ONCE", "true").lower() == "true"
+AUTO_DISPATCH_ENABLED: bool = os.getenv("AUTO_DISPATCH_ENABLED", "false").lower() == "true"
+MOCK_LOOP_FOREVER: bool     = os.getenv("MOCK_LOOP_FOREVER", "true").lower() == "true"
 
 # ---------------------------------------------------------------------------
 # Flask

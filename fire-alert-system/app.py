@@ -284,25 +284,129 @@ def sse_stream():
     )
 
 
+# ---------------------------------------------------------------------------
+# SMS Recipients & Testing Endpoints
+# ---------------------------------------------------------------------------
+
+@app.route("/api/recipients", methods=["GET"])
+def get_recipients():
+    """
+    Return all registered alert phone numbers and Twilio gateway status.
+    """
+    recipients = database.fetch_recipients()
+    has_auth_token = bool(config.TWILIO_ACCOUNT_SID and config.TWILIO_AUTH_TOKEN)
+    has_api_key = bool(config.TWILIO_ACCOUNT_SID and config.TWILIO_API_KEY_SID and config.TWILIO_API_KEY_SECRET)
+    sender_configured = bool(config.TWILIO_WHATSAPP_FROM if config.ALERT_CHANNEL == "whatsapp" else config.TWILIO_FROM_NUMBER)
+    twilio_configured = (has_auth_token or has_api_key) and sender_configured
+    return jsonify({
+        "status": "ok",
+        "recipients": recipients,
+        "count": len(recipients),
+        "primary": database.fetch_primary_recipient(),
+        "twilio_configured": twilio_configured,
+        "alert_channel": config.ALERT_CHANNEL,
+        "from_number": (config.TWILIO_WHATSAPP_FROM if config.ALERT_CHANNEL == "whatsapp" else config.TWILIO_FROM_NUMBER) or "Not set",
+    })
+
+
+@app.route("/api/recipients", methods=["POST"])
+def register_recipient():
+    """
+    Register or update a phone number to receive emergency fire SMS alerts.
+    """
+    data = request.get_json(silent=True) or {}
+    raw_phone = str(data.get("phone_number", "")).strip()
+    name = str(data.get("name", "Emergency Responder")).strip()
+
+    # Normalize phone number
+    phone = raw_phone.replace(" ", "").replace("-", "").replace("(", "").replace(")", "")
+    if not phone:
+        return jsonify({"status": "error", "message": "Phone number cannot be empty."}), 400
+
+    # Ensure E.164 formatting (starts with +)
+    if not phone.startswith("+"):
+        # If standard 10 digit Indian number without country code, prefix +91
+        if len(phone) == 10 and phone.isdigit():
+            phone = f"+91{phone}"
+        else:
+            phone = f"+{phone}"
+
+    saved = database.add_or_update_recipient(phone, name)
+    config.TWILIO_TO_NUMBER = phone  # Update current active memory target
+
+    has_auth_token = bool(config.TWILIO_ACCOUNT_SID and config.TWILIO_AUTH_TOKEN)
+    has_api_key = bool(config.TWILIO_ACCOUNT_SID and config.TWILIO_API_KEY_SID and config.TWILIO_API_KEY_SECRET)
+    sender_configured = bool(config.TWILIO_WHATSAPP_FROM if config.ALERT_CHANNEL == "whatsapp" else config.TWILIO_FROM_NUMBER)
+    twilio_configured = (has_auth_token or has_api_key) and sender_configured
+
+    msg = f"Mobile number {phone} registered successfully for alerts!"
+    if not twilio_configured:
+        msg += " (Twilio SID/Auth Token pending in .env for delivery)"
+
+    return jsonify({
+        "status": "ok",
+        "message": msg,
+        "recipient": saved,
+        "recipients": database.fetch_recipients(),
+        "twilio_configured": twilio_configured,
+    })
+
+
+@app.route("/api/recipients", methods=["DELETE"])
+def remove_recipient():
+    """
+    Delete a registered mobile number.
+    """
+    data = request.get_json(silent=True) or {}
+    phone = str(data.get("phone_number", "")).strip()
+    if not phone:
+        return jsonify({"status": "error", "message": "Phone number required"}), 400
+
+    deleted = database.delete_recipient(phone)
+    return jsonify({
+        "status": "ok",
+        "deleted": deleted,
+        "recipients": database.fetch_recipients(),
+    })
+
+
 @app.route("/api/test-sms", methods=["POST"])
 def trigger_test_sms():
     """
-    Convenience endpoint to test Twilio SMS configuration directly from the UI.
+    Endpoint triggered by the top-right button to manually dispatch an alert.
+    Uses the latest real-time telemetry from the dashboard.
     """
-    fake_event = {
+    data = request.get_json(silent=True) or {}
+    custom_target = data.get("phone_number")
+
+    latest = system_state.get("latest_reading") or {}
+    alert_event = {
         "type": "reading",
-        "temp": 34.8,
-        "humidity": 55.0,
-        "mq2": 480.0,
-        "delta": 198.0,
-        "confidence": 100.0,
+        "temp": latest.get("temp", 35.2),
+        "humidity": latest.get("humidity", 54.8),
+        "mq2": latest.get("mq2", 510.0),
+        "delta": latest.get("delta", 228.0),
+        "confidence": latest.get("confidence", 100.0),
         "prediction": "FIRE",
         "safety_suppressed": False,
+        "node_id": latest.get("node_id", "ESP32-LORA-NODE-01"),
+        "timestamp": latest.get("timestamp", datetime.now(timezone.utc).isoformat()),
     }
     try:
-        send_fire_sms(fake_event)
-        return jsonify({"status": "ok", "message": "Test fire SMS triggered"})
+        result = send_fire_sms(alert_event, target_number=custom_target)
+        if result.get("twilio_configured") is False:
+            return jsonify({
+                "status": "info",
+                "message": result.get("message", "Number registered. Twilio credentials not configured in .env yet."),
+                "details": result,
+            })
+        return jsonify({
+            "status": "ok" if result.get("success", True) else "warning",
+            "message": result.get("message", "Fire alert triggered"),
+            "details": result,
+        })
     except Exception as exc:
+        log.exception(f"Error in manual alert trigger: {exc}")
         return jsonify({"status": "error", "message": str(exc)}), 500
 
 
@@ -336,6 +440,11 @@ def main():
         default=config.SERIAL_PORT,
         help=f"Serial port for ESP32 (default: {config.SERIAL_PORT})",
     )
+    parser.add_argument(
+        "--no-loop",
+        action="store_true",
+        help="Replay mock file only once without continuous cycling",
+    )
     args = parser.parse_args()
 
     # 1. Initialize SQLite Database
@@ -357,12 +466,15 @@ def main():
     # 3. Start Serial Reader or Mock Reader
     if args.mock:
         system_state["mode"] = "mock"
-        log.info(f">>> RUNNING IN MOCK / DEMO MODE (replaying {args.mock_file}) <<<")
+        should_loop = config.MOCK_LOOP_FOREVER and not args.no_loop
+        log.info(
+            f">>> RUNNING IN MOCK / DEMO MODE (replaying {args.mock_file}, loop={should_loop}) <<<"
+        )
         reader = MockSerialReader(
             mock_file=args.mock_file,
             event_queue=event_queue,
             delay=config.MOCK_LINE_DELAY_SECONDS,
-            loop_forever=True,
+            loop_forever=should_loop,
         )
 
     else:

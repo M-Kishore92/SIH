@@ -234,6 +234,7 @@ class MockSerialReader:
                 time.sleep(1)
 
             if not self.loop_forever:
+                log.info("Mock data replay finished (one-time pass). Reader idle while server continues running.")
                 break
             log.info("Mock data replay finished. Looping from start...")
 

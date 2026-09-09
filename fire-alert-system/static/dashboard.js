@@ -24,6 +24,7 @@ document.addEventListener("DOMContentLoaded", () => {
   initLucide();
   initChart();
   fetchInitialData();
+  fetchRecipients();
   initSSE();
   setupEventListeners();
 });
@@ -277,13 +278,27 @@ function renderReading(reading, isLive) {
     : new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
 
   // Update Metric Cards
-  if (temp !== null) document.getElementById("valTemp").textContent = temp.toFixed(1);
-  if (hum !== null) document.getElementById("valHum").textContent = hum.toFixed(1);
-  if (mq2 !== null) document.getElementById("valMQ2").textContent = Math.round(mq2);
-  if (delta !== null) document.getElementById("valDelta").textContent = `Δ: ${delta >= 0 ? "+" : ""}${delta.toFixed(1)}`;
+  const elTemp = document.getElementById("valTemp");
+  const elHum = document.getElementById("valHum");
+  const elMQ2 = document.getElementById("valMQ2");
+  const elDelta = document.getElementById("valDelta");
+  const elTempRate = document.getElementById("valTempRate");
+  const elMQ2Rate = document.getElementById("valMQ2Rate");
 
-  document.getElementById("valTempRate").textContent = `Rate: ${tempRate >= 0 ? "+" : ""}${tempRate.toFixed(2)}°C/s`;
-  document.getElementById("valMQ2Rate").textContent = `Rate: ${mq2Rate >= 0 ? "+" : ""}${mq2Rate.toFixed(2)}/s`;
+  if (elTemp && temp !== null) elTemp.textContent = temp.toFixed(1);
+  if (elHum && hum !== null) elHum.textContent = hum.toFixed(1);
+  if (elMQ2 && mq2 !== null) elMQ2.textContent = Math.round(mq2);
+  if (elDelta && delta !== null) elDelta.textContent = `Δ: ${delta >= 0 ? "+" : ""}${delta.toFixed(1)}`;
+
+  if (elTempRate) elTempRate.textContent = `Rate: ${tempRate >= 0 ? "+" : ""}${tempRate.toFixed(2)}°C/s`;
+  if (elMQ2Rate) elMQ2Rate.textContent = `Rate: ${mq2Rate >= 0 ? "+" : ""}${mq2Rate.toFixed(2)}/s`;
+
+  // Update LoRa Sensor Node ID under verdict box
+  const nodeId = reading.node_id || "ESP32-LORA-NODE-01";
+  const elNodeId = document.getElementById("sensorNodeId");
+  if (elNodeId) {
+    elNodeId.textContent = nodeId;
+  }
 
   // Update Master Status Card
   updateMasterStatus(prediction, isSuppressed, confidence, timeLabel);
@@ -307,24 +322,26 @@ function updateMasterStatus(prediction, isSuppressed, confidence, timeStr) {
   const syncText = document.getElementById("statusLastSync");
   const icon = document.getElementById("statusIcon");
 
-  confText.textContent = `${confidence}%`;
-  syncText.textContent = timeStr || "Just now";
+  if (confText) confText.textContent = `${confidence}%`;
+  if (syncText) syncText.textContent = timeStr || "Just now";
+
+  if (!card || !headline) return;
 
   if (prediction === "FIRE" && !isSuppressed) {
     card.className = "card status-card status-fire";
     headline.textContent = "🔥 FIRE DETECTED";
-    subtext.textContent = "CRITICAL ALERT: Flame / Smoke signatures exceed threshold. Twilio SMS dispatched.";
-    icon.setAttribute("data-lucide", "alert-triangle");
+    if (subtext) subtext.textContent = "CRITICAL ALERT: Flame / Smoke signatures exceed threshold. Twilio SMS dispatched.";
+    if (icon) icon.setAttribute("data-lucide", "alert-triangle");
   } else if (isSuppressed) {
     card.className = "card status-card status-suppressed";
     headline.textContent = "SAFETY SUPPRESSED";
-    subtext.textContent = "Model flagged FIRE, but MQ-2 is within safe calibrated baseline. Suppressed as likely false positive.";
-    icon.setAttribute("data-lucide", "alert-circle");
+    if (subtext) subtext.textContent = "Model flagged FIRE, but MQ-2 is within safe calibrated baseline. Suppressed as likely false positive.";
+    if (icon) icon.setAttribute("data-lucide", "alert-circle");
   } else {
     card.className = "card status-card status-safe";
     headline.textContent = "NOT FIRE";
-    subtext.textContent = "All telemetry within calibrated baseline thresholds. Sensor network nominal.";
-    icon.setAttribute("data-lucide", "shield-check");
+    if (subtext) subtext.textContent = "All telemetry within calibrated baseline thresholds. Sensor network nominal.";
+    if (icon) icon.setAttribute("data-lucide", "shield-check");
   }
 
   initLucide();
@@ -337,10 +354,10 @@ function markLatestEventSuppressed() {
   const card = document.getElementById("masterStatusCard");
   const icon = document.getElementById("statusIcon");
 
-  card.className = "card status-card status-suppressed";
-  headline.textContent = "SAFETY SUPPRESSED";
-  subtext.textContent = "Model flagged FIRE, but MQ-2 is within safe calibrated baseline. Suppressed as likely false positive.";
-  icon.setAttribute("data-lucide", "alert-circle");
+  if (card) card.className = "card status-card status-suppressed";
+  if (headline) headline.textContent = "SAFETY SUPPRESSED";
+  if (subtext) subtext.textContent = "Model flagged FIRE, but MQ-2 is within safe calibrated baseline. Suppressed as likely false positive.";
+  if (icon) icon.setAttribute("data-lucide", "alert-circle");
   initLucide();
 
   // Update top row of table
@@ -364,20 +381,24 @@ function renderPhase(phase, details, secondsRemaining) {
   const bar = document.getElementById("phaseProgressBar");
   const phaseStat = document.getElementById("statusPhaseName");
 
-  phaseStat.textContent = phase.charAt(0).toUpperCase() + phase.slice(1);
+  if (phaseStat) {
+    phaseStat.textContent = phase.charAt(0).toUpperCase() + phase.slice(1);
+  }
+
+  if (!banner) return; // Banner was removed by user request
 
   if (phase === "warmup") {
     banner.classList.remove("hidden");
-    title.textContent = "Sensor Warming Up";
-    desc.textContent = details || `MQ-2 heater stabilizing (${secondsRemaining || 0}s remaining)`;
+    if (title) title.textContent = "Sensor Warming Up";
+    if (desc) desc.textContent = details || `MQ-2 heater stabilizing (${secondsRemaining || 0}s remaining)`;
     const pct = Math.max(5, Math.min(100, Math.round(((60 - (secondsRemaining || 0)) / 60) * 100)));
-    bar.style.width = `${pct}%`;
+    if (bar) bar.style.width = `${pct}%`;
   } else if (phase === "calibrating") {
     banner.classList.remove("hidden");
-    title.textContent = "Calibrating Environment Baseline";
-    desc.textContent = details || `Establishing clean air baseline (${secondsRemaining || 0}s remaining)`;
+    if (title) title.textContent = "Calibrating Environment Baseline";
+    if (desc) desc.textContent = details || `Establishing clean air baseline (${secondsRemaining || 0}s remaining)`;
     const pct = Math.max(5, Math.min(100, Math.round(((120 - (secondsRemaining || 0)) / 120) * 100)));
-    bar.style.width = `${pct}%`;
+    if (bar) bar.style.width = `${pct}%`;
   } else {
     // Monitoring phase
     banner.classList.add("hidden");
@@ -385,34 +406,42 @@ function renderPhase(phase, details, secondsRemaining) {
 }
 
 // ---------------------------------------------------------------------------
-// Calibration Rendering
+// Calibration Rendering (with null checks)
 // ---------------------------------------------------------------------------
 function renderCalibration(cal) {
   if (!cal) return;
 
-  if (cal.baseline_mq2 !== null && cal.baseline_mq2 !== undefined) {
-    document.getElementById("calBaseMQ2").textContent = cal.baseline_mq2.toFixed(1);
+  const elBaseMQ2 = document.getElementById("calBaseMQ2");
+  const elStdDev = document.getElementById("calStdDev");
+  const elDelta = document.getElementById("calThresholdDelta");
+  const elBaseTemp = document.getElementById("calBaseTemp");
+  const elNoteBaseTemp = document.getElementById("noteBaseTemp");
+  const elTrigger = document.getElementById("calTriggerLevel");
+  const elTime = document.getElementById("calTime");
+
+  if (elBaseMQ2 && cal.baseline_mq2 !== null && cal.baseline_mq2 !== undefined) {
+    elBaseMQ2.textContent = cal.baseline_mq2.toFixed(1);
   }
-  if (cal.stddev !== null && cal.stddev !== undefined) {
-    document.getElementById("calStdDev").textContent = cal.stddev.toFixed(2);
+  if (elStdDev && cal.stddev !== null && cal.stddev !== undefined) {
+    elStdDev.textContent = cal.stddev.toFixed(2);
   }
-  if (cal.threshold_delta !== null && cal.threshold_delta !== undefined) {
-    document.getElementById("calThresholdDelta").textContent = `+${cal.threshold_delta.toFixed(1)}`;
+  if (elDelta && cal.threshold_delta !== null && cal.threshold_delta !== undefined) {
+    elDelta.textContent = `+${cal.threshold_delta.toFixed(1)}`;
   }
   if (cal.baseline_temp !== null && cal.baseline_temp !== undefined) {
-    document.getElementById("calBaseTemp").textContent = `${cal.baseline_temp.toFixed(1)} °C`;
-    document.getElementById("noteBaseTemp").textContent = `Base: ${cal.baseline_temp.toFixed(1)}°C`;
+    if (elBaseTemp) elBaseTemp.textContent = `${cal.baseline_temp.toFixed(1)} °C`;
+    if (elNoteBaseTemp) elNoteBaseTemp.textContent = `Base: ${cal.baseline_temp.toFixed(1)}°C`;
   }
 
   // Trigger level calculation
-  if (cal.baseline_mq2 !== undefined && cal.threshold_delta !== undefined) {
+  if (elTrigger && cal.baseline_mq2 !== undefined && cal.threshold_delta !== undefined) {
     const trigger = cal.baseline_mq2 + cal.threshold_delta;
-    document.getElementById("calTriggerLevel").textContent = `≥ ${trigger.toFixed(1)} ADC`;
+    elTrigger.textContent = `≥ ${trigger.toFixed(1)} ADC`;
   }
 
-  if (cal.calibrated_at) {
+  if (elTime && cal.calibrated_at) {
     const dt = new Date(cal.calibrated_at);
-    document.getElementById("calTime").textContent = dt.toLocaleTimeString();
+    elTime.textContent = dt.toLocaleTimeString();
   }
 }
 
@@ -538,7 +567,115 @@ function setSystemMode(mode) {
 // ---------------------------------------------------------------------------
 // Event Listeners & Interactive Controls
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// SMS Recipients Management
+// ---------------------------------------------------------------------------
+async function fetchRecipients() {
+  try {
+    const res = await fetch("/api/recipients");
+    if (!res.ok) return;
+    const data = await res.json();
+    renderRecipients(data.recipients || []);
+    updateNavPhoneBadge(data);
+    updateTwilioGatewayBadge(data.twilio_configured);
+  } catch (err) {
+    console.error("Error fetching recipients:", err);
+  }
+}
+
+function updateNavPhoneBadge(data) {
+  const badge = document.getElementById("navPhoneBadge");
+  const text = document.getElementById("navPhoneText");
+  if (!text) return;
+
+  const count = (data.recipients || []).length;
+  const primary = data.primary;
+
+  if (count > 0 && primary) {
+    const shortNum = primary.slice(-10);
+    text.textContent = `SMS: +..${shortNum.slice(-7)} (+${count})`;
+    if (badge) {
+      badge.style.borderColor = "rgba(56,189,248,0.4)";
+      badge.style.color = "#38bdf8";
+    }
+  } else {
+    text.textContent = "SMS: No number registered";
+    if (badge) {
+      badge.style.borderColor = "";
+      badge.style.color = "";
+    }
+  }
+}
+
+function updateTwilioGatewayBadge(isConfigured) {
+  const badge = document.getElementById("twilioGatewayBadge");
+  const text = document.getElementById("twilioGatewayText");
+  if (!badge || !text) return;
+
+  if (isConfigured) {
+    badge.className = "sms-status-indicator";
+    text.textContent = "Twilio Gateway Armed";
+  } else {
+    badge.className = "sms-status-indicator sms-status-warning";
+    text.textContent = "Twilio Pending (.env)";
+  }
+}
+
+function renderRecipients(recipients) {
+  const list = document.getElementById("recipientsList");
+  const countEl = document.getElementById("recipientCount");
+  if (!list) return;
+
+  if (countEl) countEl.textContent = recipients.length;
+
+  if (!recipients || recipients.length === 0) {
+    list.innerHTML = '<div class="recipients-empty">No alert recipients registered yet. Enter a mobile number above.</div>';
+    return;
+  }
+
+  list.innerHTML = "";
+  recipients.forEach(r => {
+    const chip = document.createElement("div");
+    chip.className = "recipient-chip";
+    chip.innerHTML = `
+      <i data-lucide="phone-call" class="recipient-chip-icon"></i>
+      <span class="recipient-phone">${r.phone_number}</span>
+      <span class="recipient-name">${r.name || "Responder"}</span>
+      <button class="recipient-del-btn" data-phone="${r.phone_number}" title="Remove recipient">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+      </button>
+    `;
+    chip.querySelector(".recipient-del-btn").addEventListener("click", () => deleteRecipient(r.phone_number));
+    list.appendChild(chip);
+  });
+
+  initLucide();
+}
+
+async function deleteRecipient(phone) {
+  try {
+    const res = await fetch("/api/recipients", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ phone_number: phone }),
+    });
+    const data = await res.json();
+    if (res.ok) {
+      renderRecipients(data.recipients || []);
+      updateNavPhoneBadge(data);
+      showToast(`Removed ${phone} from SMS alert list.`, "warning");
+      await fetchRecipients();
+    }
+  } catch (err) {
+    showToast(`Failed to remove recipient: ${err}`, "error");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Event Listeners & Interactive Controls
+// ---------------------------------------------------------------------------
 function setupEventListeners() {
+  // Top-nav quick Test SMS button
   const btnTestSMS = document.getElementById("btnTestSMS");
   if (btnTestSMS) {
     btnTestSMS.addEventListener("click", async () => {
@@ -546,18 +683,90 @@ function setupEventListeners() {
       btnTestSMS.innerHTML = '<span class="icon-sm">⏳</span> Sending...';
 
       try {
-        const res = await fetch("/api/test-sms", { method: "POST" });
+        const res = await fetch("/api/test-sms", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
         const result = await res.json();
-        if (res.ok) {
-          showToast("SMS Alert Dispatched! Check recipient phone.", "success");
-        } else {
-          showToast(`SMS Dispatch: ${result.message}`, "warning");
-        }
+        const type = result.status === "ok" ? "success" : result.status === "info" ? "warning" : "warning";
+        showToast(result.message || "Test alert dispatched!", type);
       } catch (err) {
         showToast(`Failed to trigger test SMS: ${err}`, "error");
       } finally {
         btnTestSMS.disabled = false;
-        btnTestSMS.innerHTML = '<i data-lucide="message-square" class="icon-sm"></i><span>Test SMS</span>';
+        btnTestSMS.innerHTML = '<i data-lucide="bell" class="icon-sm"></i><span>Trigger Alert</span>';
+        initLucide();
+      }
+    });
+  }
+
+  // Phone registration form submit
+  const phoneForm = document.getElementById("phoneRegisterForm");
+  if (phoneForm) {
+    phoneForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const phoneInput = document.getElementById("inputPhoneNumber");
+      const nameInput = document.getElementById("inputResponderName");
+      const btn = document.getElementById("btnRegisterPhone");
+
+      const phone = phoneInput ? phoneInput.value.trim() : "";
+      const name = nameInput ? nameInput.value.trim() : "";
+
+      if (!phone) return;
+
+      btn.disabled = true;
+      btn.innerHTML = '<span>Registering...</span>';
+
+      try {
+        const res = await fetch("/api/recipients", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ phone_number: phone, name: name || "Emergency Responder" }),
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+          renderRecipients(data.recipients || []);
+          updateNavPhoneBadge(data);
+          updateTwilioGatewayBadge(data.twilio_configured);
+          if (phoneInput) phoneInput.value = "";
+          if (nameInput) nameInput.value = "";
+          showToast(data.message || `${phone} registered!`, data.twilio_configured ? "success" : "warning");
+        } else {
+          showToast(data.message || "Registration failed.", "error");
+        }
+      } catch (err) {
+        showToast(`Error registering phone: ${err}`, "error");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<i data-lucide="user-plus" class="icon-sm"></i><span>Register Phone</span>';
+        initLucide();
+      }
+    });
+  }
+
+  // In-card "Send Test Alert" button
+  const btnTestSMSReg = document.getElementById("btnTestSMSReg");
+  if (btnTestSMSReg) {
+    btnTestSMSReg.addEventListener("click", async () => {
+      btnTestSMSReg.disabled = true;
+      btnTestSMSReg.innerHTML = '<span class="icon-sm">⏳</span> Sending...';
+
+      try {
+        const res = await fetch("/api/test-sms", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        });
+        const result = await res.json();
+        const type = result.status === "ok" ? "success" : "warning";
+        showToast(result.message || "Test alert dispatched!", type);
+      } catch (err) {
+        showToast(`Failed to send test alert: ${err}`, "error");
+      } finally {
+        btnTestSMSReg.disabled = false;
+        btnTestSMSReg.innerHTML = '<i data-lucide="send" class="icon-sm"></i><span>Send Test Alert</span>';
         initLucide();
       }
     });

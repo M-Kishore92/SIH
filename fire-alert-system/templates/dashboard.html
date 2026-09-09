@@ -37,7 +37,11 @@
       </div>
     </div>
 
-    <div class="header-actions">
+      <div id="navPhoneBadge" class="badge badge-neutral" title="Emergency SMS Alert Recipient">
+        <i data-lucide="phone-call" class="icon-sm"></i>
+        <span id="navPhoneText">SMS: Loading...</span>
+      </div>
+
       <div id="connStatusBadge" class="badge badge-pulse badge-connected">
         <span class="dot"></span>
         <span id="connStatusText">SSE Connected</span>
@@ -48,9 +52,9 @@
         <span id="systemModeText">Hardware Mode</span>
       </div>
 
-      <button id="btnTestSMS" class="btn btn-secondary" title="Send a test SMS to verify Twilio configuration">
-        <i data-lucide="message-square" class="icon-sm"></i>
-        <span>Test SMS</span>
+      <button id="btnTestSMS" class="btn btn-secondary" title="Dispatch alert message to registered mobile">
+        <i data-lucide="bell" class="icon-sm"></i>
+        <span>Trigger Alert</span>
       </button>
     </div>
   </header>
@@ -58,52 +62,76 @@
   <!-- Main Dashboard Container -->
   <main class="dashboard-container">
 
-    <!-- Phase / Warm-up / Calibration Banner (Shown dynamically when calibrating/warming up) -->
-    <section id="phaseBanner" class="phase-banner hidden">
-      <div class="phase-content">
-        <div class="phase-spinner"></div>
-        <div>
-          <h4 id="phaseTitle" class="phase-heading">Sensor Warming Up</h4>
-          <p id="phaseDesc" class="phase-sub">MQ-2 heater stabilizing baseline resistance...</p>
-        </div>
-      </div>
-      <div class="phase-progress-wrapper">
-        <div id="phaseProgressBar" class="phase-progress-bar" style="width: 50%;"></div>
-      </div>
-    </section>
-
     <!-- Top Hero: Master Status & Vital Metrics -->
     <section class="hero-grid">
-      <!-- Master Status Card -->
-      <div id="masterStatusCard" class="card status-card status-safe">
-        <div class="status-card-header">
-          <div class="status-indicator-ring">
-            <i id="statusIcon" data-lucide="shield-check" class="status-icon"></i>
+      <!-- Left Column: Master Status Verdict Card & LoRa Node Source Card -->
+      <div class="verdict-column">
+        <!-- Master Status Card / Verdict Box -->
+        <div id="masterStatusCard" class="card status-card status-safe">
+          <div class="status-card-header">
+            <div class="status-indicator-ring">
+              <i id="statusIcon" data-lucide="shield-check" class="status-icon"></i>
+            </div>
+            <div class="status-meta">
+              <span class="status-label">CURRENT SYSTEM STATE</span>
+              <h2 id="statusHeadline" class="status-headline">NOT FIRE</h2>
+              <p id="statusSubtext" class="status-desc">All telemetry within calibrated baseline thresholds.</p>
+            </div>
           </div>
-          <div class="status-meta">
-            <span class="status-label">CURRENT SYSTEM STATE</span>
-            <h2 id="statusHeadline" class="status-headline">NOT FIRE</h2>
-            <p id="statusSubtext" class="status-desc">All telemetry within calibrated baseline thresholds.</p>
+
+          <div class="status-footer">
+            <div class="status-stat">
+              <span class="stat-caption">Confidence</span>
+              <span id="statusConfidence" class="stat-number">100%</span>
+            </div>
+            <div class="status-stat">
+              <span class="stat-caption">Active Phase</span>
+              <span id="statusPhaseName" class="stat-number">Monitoring</span>
+            </div>
+            <div class="status-stat">
+              <span class="stat-caption">Last Sync</span>
+              <span id="statusLastSync" class="stat-number">Just now</span>
+            </div>
           </div>
         </div>
 
-        <div class="status-footer">
-          <div class="status-stat">
-            <span class="stat-caption">Confidence</span>
-            <span id="statusConfidence" class="stat-number">100%</span>
+        <!-- Sensor Node Receiver Display (LoRa Node Source) under Verdict Box -->
+        <div class="card node-source-card" id="nodeSourceCard">
+          <div class="node-source-header">
+            <div class="node-badge">
+              <span class="live-signal-dot"></span>
+              <span class="node-badge-title">LoRa Telemetry Link</span>
+            </div>
+            <span class="node-protocol-tag">LoRa Gateway Connected</span>
           </div>
-          <div class="status-stat">
-            <span class="stat-caption">Active Phase</span>
-            <span id="statusPhaseName" class="stat-number">Monitoring</span>
+
+          <div class="node-source-body">
+            <div class="node-icon-wrapper">
+              <i data-lucide="radio" class="node-icon"></i>
+            </div>
+            <div class="node-source-info">
+              <span class="node-source-label">Receiving From Sensor Node</span>
+              <div class="node-id-row">
+                <span id="sensorNodeId" class="node-id-val">ESP32-LORA-NODE-01</span>
+                <span class="node-status-pill"><span class="dot-online"></span> ACTIVE</span>
+              </div>
+            </div>
           </div>
-          <div class="status-stat">
-            <span class="stat-caption">Last Sync</span>
-            <span id="statusLastSync" class="stat-number">Just now</span>
+
+          <div class="node-source-footer">
+            <div class="node-stat-item">
+              <span class="node-stat-label">Uplink Channel</span>
+              <span class="node-stat-val">ESP32 + LoRa SX1276/78</span>
+            </div>
+            <div class="node-stat-item">
+              <span class="node-stat-label">Link Status</span>
+              <span class="node-stat-val text-green" id="nodeLinkStatus">Receiving Frames</span>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Quick Metrics Grid -->
+      <!-- Quick Metrics Grid (Temperature, Humidity, MQ-2 Gas) -->
       <div class="metrics-grid">
         <!-- Temp Card -->
         <div class="card metric-card">
@@ -151,24 +179,84 @@
             <span class="delta-badge" id="valDelta">Δ: +0</span>
           </div>
         </div>
+      </div>
+    </section>
 
-        <!-- SMS Alert Dispatch Card -->
-        <div class="card metric-card">
-          <div class="metric-top">
-            <span class="metric-title">Twilio Alert Gateway</span>
-            <div class="icon-box icon-red"><i data-lucide="send"></i></div>
+    <!-- Emergency SMS Alert Gateway & Phone Registration Section -->
+    <section class="card sms-registration-card" id="smsSection">
+      <div class="sms-card-header">
+        <div class="sms-heading-group">
+          <div class="sms-icon-box">
+            <i data-lucide="message-square-warning" class="sms-icon"></i>
           </div>
-          <div class="metric-value-wrapper">
-            <span id="smsGatewayStatus" class="metric-value metric-value-sm">ARMED</span>
+          <div>
+            <h3 class="sms-card-title">Emergency SMS Alert Gateway</h3>
+            <p class="sms-card-sub">Register mobile numbers to receive immediate SMS notifications when wildfire is verified</p>
           </div>
-          <div class="metric-footer">
-            <span id="smsDebounceLabel" class="status-note">Debounce: 120s / on state change</span>
+        </div>
+        <div class="sms-status-indicator" id="twilioGatewayBadge">
+          <span class="live-signal-dot"></span>
+          <span id="twilioGatewayText">Gateway Online</span>
+        </div>
+      </div>
+
+      <!-- Registration Form -->
+      <form id="phoneRegisterForm" class="sms-form">
+        <div class="form-input-container">
+          <div class="input-field-group">
+            <label for="inputPhoneNumber" class="field-label">Mobile Number</label>
+            <div class="input-wrapper">
+              <i data-lucide="phone" class="input-icon"></i>
+              <input
+                type="tel"
+                id="inputPhoneNumber"
+                class="styled-input"
+                placeholder="+91 98765 43210 (or 10 digits)"
+                required
+                autocomplete="tel"
+              />
+            </div>
           </div>
+
+          <div class="input-field-group">
+            <label for="inputResponderName" class="field-label">Responder / Agency Name</label>
+            <div class="input-wrapper">
+              <i data-lucide="user-check" class="input-icon"></i>
+              <input
+                type="text"
+                id="inputResponderName"
+                class="styled-input"
+                placeholder="e.g. Forest Ranger / Fire Ops"
+              />
+            </div>
+          </div>
+
+          <div class="form-btn-group">
+            <button type="submit" id="btnRegisterPhone" class="btn btn-primary">
+              <i data-lucide="user-plus" class="icon-sm"></i>
+              <span>Register Phone</span>
+            </button>
+            <button type="button" id="btnTestSMSReg" class="btn btn-secondary">
+              <i data-lucide="send" class="icon-sm"></i>
+              <span>Send Test Alert</span>
+            </button>
+          </div>
+        </div>
+      </form>
+
+      <!-- Active Registered Numbers List -->
+      <div class="recipients-box">
+        <div class="recipients-box-header">
+          <span class="recipients-label">REGISTERED ALERT RECIPIENTS (<span id="recipientCount">0</span>)</span>
+          <span class="recipients-note">Auto-debounced: Resends only on state change or 120s</span>
+        </div>
+        <div id="recipientsList" class="recipients-list">
+          <div class="recipients-loading">Loading registered recipients...</div>
         </div>
       </div>
     </section>
 
-    <!-- Calibration Info & Chart Section -->
+    <!-- Chart Section (Full Width) -->
     <section class="main-body-grid">
       <!-- Live Telemetry Graph -->
       <div class="card chart-card">
@@ -184,66 +272,6 @@
         </div>
         <div class="chart-wrapper">
           <canvas id="telemetryChart"></canvas>
-        </div>
-      </div>
-
-      <!-- Calibration Parameters Panel -->
-      <div class="card calibration-card">
-        <div class="card-header">
-          <div class="card-heading-group">
-            <h3 class="card-title"><i data-lucide="sliders" class="icon-sm"></i> Calibration Profile</h3>
-            <p class="card-sub">Dynamic baseline and threshold margins set by firmware</p>
-          </div>
-        </div>
-
-        <div class="calibration-list">
-          <div class="cal-row">
-            <div class="cal-info">
-              <span class="cal-label">Baseline MQ-2</span>
-              <span class="cal-sub">Clean air ambient resistance baseline</span>
-            </div>
-            <div class="cal-badge" id="calBaseMQ2">--.-</div>
-          </div>
-
-          <div class="cal-row">
-            <div class="cal-info">
-              <span class="cal-label">MQ-2 StdDev (σ)</span>
-              <span class="cal-sub">Sensor noise standard deviation</span>
-            </div>
-            <div class="cal-badge" id="calStdDev">--.-</div>
-          </div>
-
-          <div class="cal-row">
-            <div class="cal-info">
-              <span class="cal-label">Fire Threshold Δ</span>
-              <span class="cal-sub">Required deviation above baseline to alarm</span>
-            </div>
-            <div class="cal-badge cal-badge-warning" id="calThresholdDelta">--.-</div>
-          </div>
-
-          <div class="cal-row">
-            <div class="cal-info">
-              <span class="cal-label">Trigger Level (Target MQ2)</span>
-              <span class="cal-sub">Threshold cut-off value: Baseline + Δ</span>
-            </div>
-            <div class="cal-badge cal-badge-danger" id="calTriggerLevel">--.-</div>
-          </div>
-
-          <div class="cal-row">
-            <div class="cal-info">
-              <span class="cal-label">Baseline Temperature</span>
-              <span class="cal-sub">Ambient thermal reference</span>
-            </div>
-            <div class="cal-badge" id="calBaseTemp">--.- °C</div>
-          </div>
-
-          <div class="cal-row">
-            <div class="cal-info">
-              <span class="cal-label">Calibrated At</span>
-              <span class="cal-sub">Timestamp of baseline lock</span>
-            </div>
-            <div class="cal-badge text-mono" id="calTime">Awaiting lock</div>
-          </div>
         </div>
       </div>
     </section>

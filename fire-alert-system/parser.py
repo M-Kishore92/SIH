@@ -74,7 +74,7 @@ _RE_READING = re.compile(
     r"\s*\|\s*MQ2=([\d.]+)(?:\s*\(Baseline=([\d.]+),\s*Delta=([+-]?[\d.]+)\))?"
     r"\s*\|\s*TempRate=([+-]?[\d.]+)"
     r"\s*\|\s*MQ2Rate=([+-]?[\d.]+)"
-    r"\s*\|\s*Prediction=(FIRE|NOT FIRE)"
+    r"\s*\|\s*(?:Prediction|Verdict)=(FIRE|NOT FIRE)"
     r"\s*\|\s*Confidence=([\d.]+)%",
     re.IGNORECASE,
 )
@@ -209,10 +209,18 @@ def parse_line(raw_line: str) -> dict | None:
     if m:
         base_val = float(m.group(4)) if m.group(4) is not None else 0.0
         delta_val = float(m.group(5)) if m.group(5) is not None else 0.0
+
+        # Extract LoRa Node ID if present in the telemetry string (e.g. Node=NODE-01, NodeID=02)
+        m_node = re.search(r"(?:NodeID|SensorNode|LoraNode|Node)\s*[:=]\s*([A-Za-z0-9_-]+)", line, re.IGNORECASE)
+        if not m_node:
+            m_node = re.search(r"^\[([A-Za-z0-9_-]*(?:NODE|LORA|ESP)[A-Za-z0-9_-]*)\]", line, re.IGNORECASE)
+        node_id = m_node.group(1) if m_node else "ESP32-LORA-NODE-01"
+
         return {
             "type": "reading",
             "timestamp": now,
             "raw": line,
+            "node_id": node_id,
             "temp": float(m.group(1)),
             "humidity": float(m.group(2)),
             "mq2": float(m.group(3)),
