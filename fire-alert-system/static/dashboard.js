@@ -22,6 +22,7 @@ const chartMQ2Data = [];
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
   initLucide();
+  initMap();
   initChart();
   fetchInitialData();
   fetchRecipients();
@@ -33,6 +34,150 @@ function initLucide() {
   if (window.lucide) {
     window.lucide.createIcons();
   }
+}
+
+// ---------------------------------------------------------------------------
+// Static Node Location Lookup
+// ---------------------------------------------------------------------------
+/**
+ * getNodeLocation(nodeId)
+ * Returns a fixed location object for Sri Sairam Engineering College,
+ * West Tambaram, Chennai — regardless of the node ID passed in.
+ * No GPS, no geocoding API, no external map API.
+ */
+function getNodeLocation(nodeId) {
+  return {
+    lat: 12.960277,
+    lng: 80.057448,
+    label: "Sri Sairam Engineering College",
+    address: "West Tambaram, Chennai, Tamil Nadu",
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Leaflet OpenStreetMap Initialization
+// ---------------------------------------------------------------------------
+let sensorMap = null;
+
+// Per-node marker registry  { nodeId: L.circleMarker }
+const nodeMarkers = {};
+
+// Status → color mapping
+const STATUS_COLORS = {
+  FIRE:    { color: "#ef4444", fillColor: "#ef4444" },  // red
+  WARNING: { color: "#f97316", fillColor: "#f97316" },  // orange
+  SAFE:    { color: "#22c55e", fillColor: "#22c55e" },  // green
+  NORMAL:  { color: "#22c55e", fillColor: "#22c55e" },  // green (alias)
+};
+
+function statusColor(status) {
+  const s = (status || "SAFE").toUpperCase();
+  return STATUS_COLORS[s] || STATUS_COLORS["SAFE"];
+}
+
+function initMap() {
+  const mapElement = document.getElementById("sensorMap");
+  if (!mapElement) return;
+
+  const loc = getNodeLocation("default");
+
+  sensorMap = L.map("sensorMap").setView([loc.lat, loc.lng], 16);
+
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
+    maxZoom: 19
+  }).addTo(sensorMap);
+
+  // Place initial markers for Node A and Node B (both at Sri Sairam)
+  _placeOrUpdateMarker("nodeA", "Node A (SSE Stream)", "SAFE", "—", "—", "—");
+  _placeOrUpdateMarker("nodeB", "Node B (LoRa HTTP)", "SAFE", "—", "—", "—");
+}
+
+/**
+ * Place a new marker or update an existing one.
+ * @param {string} nodeId
+ * @param {string} nodeLabel   Human-readable name
+ * @param {string} status      "SAFE" | "WARNING" | "FIRE" | "NORMAL"
+ * @param {string|number} temp
+ * @param {string|number} hum
+ * @param {string|number} mq2
+ */
+function _placeOrUpdateMarker(nodeId, nodeLabel, status, temp, hum, mq2) {
+  if (!sensorMap) return;
+  const loc = getNodeLocation(nodeId);
+  const colors = statusColor(status);
+
+  const popupHtml = `
+    <div style="font-family:Inter,sans-serif;min-width:180px;">
+      <b style="font-size:13px;">${nodeLabel}</b><br>
+      <span style="font-size:11px;color:#64748b;">${loc.label}</span><br>
+      <span style="font-size:10px;color:#94a3b8;">${loc.address}</span>
+      <hr style="border:none;border-top:1px solid #e2e8f0;margin:6px 0;">
+      <table style="width:100%;font-size:12px;border-collapse:collapse;">
+        <tr><td>Status</td><td style="font-weight:700;color:${colors.color};">${status}</td></tr>
+        <tr><td>Temp</td><td>${temp !== "—" ? Number(temp).toFixed(1) + " °C" : "—"}</td></tr>
+        <tr><td>Humidity</td><td>${hum !== "—" ? Number(hum).toFixed(1) + " %" : "—"}</td></tr>
+        <tr><td>MQ-2</td><td>${mq2 !== "—" ? Math.round(mq2) + " ADC" : "—"}</td></tr>
+      </table>
+    </div>`;
+
+  if (nodeMarkers[nodeId]) {
+    // Update existing marker style + popup
+    nodeMarkers[nodeId].setStyle({ color: colors.color, fillColor: colors.fillColor });
+    nodeMarkers[nodeId].setPopupContent(popupHtml);
+  } else {
+    // Create new circle marker
+    const marker = L.circleMarker([loc.lat, loc.lng], {
+      radius: 14,
+      color: colors.color,
+      fillColor: colors.fillColor,
+      fillOpacity: 0.85,
+      weight: 3,
+    }).addTo(sensorMap);
+
+    marker.bindPopup(popupHtml);
+
+    // Add a tooltip label so both nodes are distinguishable on the map
+    marker.bindTooltip(nodeLabel, {
+      permanent: true,
+      direction: nodeId === "nodeA" ? "left" : "right",
+      className: "node-map-tooltip",
+      offset: nodeId === "nodeA" ? [-16, 0] : [16, 0],
+    });
+
+    nodeMarkers[nodeId] = marker;
+  }
+}
+
+/** Call this whenever Node A (SSE stream) gets a new reading. */
+function updateNodeAMarker(reading) {
+  if (!reading) return;
+  const status = reading.prediction === "FIRE" && !reading.safety_suppressed
+    ? "FIRE"
+    : reading.safety_suppressed
+      ? "WARNING"
+      : "SAFE";
+  _placeOrUpdateMarker(
+    "nodeA", "Node A (SSE Stream)",
+    status,
+    reading.temp ?? "—",
+    reading.humidity ?? "—",
+    reading.mq2 ?? "—"
+  );
+}
+
+/** Call this whenever Node B (LoRa HTTP) gets a new reading. */
+function updateNodeBMarker(reading) {
+  if (!reading) return;
+  const fs = (reading.fire_status || "NORMAL").toUpperCase();
+  const status = fs === "FIRE" ? "FIRE" : fs === "WARNING" ? "WARNING" : "SAFE";
+  _placeOrUpdateMarker(
+    "nodeB", "Node B (LoRa HTTP)",
+    status,
+    reading.temperature ?? "—",
+    reading.humidity ?? "—",
+    reading.mq2 ?? "—"
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -312,6 +457,9 @@ function renderReading(reading, isLive) {
   if (isLive) {
     prependTableRow(reading, timeLabel);
   }
+
+  // Update Node A map marker
+  updateNodeAMarker(reading);
 }
 
 function updateMasterStatus(prediction, isSuppressed, confidence, timeStr) {
@@ -796,4 +944,282 @@ function showToast(message, type = "success") {
     toast.style.transition = "all 0.3s ease";
     setTimeout(() => toast.remove(), 300);
   }, 4000);
+}
+
+// ===========================================================================
+// LoRa Node B — HTTP-Polled Live Fire Intelligence Panel
+// ===========================================================================
+//
+// Backend contract:
+//   GET /api/fire/latest  → { status, reading: { ... } } | 404 { status:"no_data" }
+//   POST /api/fire        → receives Node B LoRa HTTP JSON packet
+//
+// reading shape:
+//   { node_id, gateway_id, packet_id, node_ts, temperature, humidity, mq2,
+//     temp_rate, mq2_rate, fire_probability, smoothed_probability,
+//     trend, fire_status, lora_rssi, lora_snr, rx_ts, server_ts }
+//
+// fire_status: "NORMAL" | "WARNING" | "FIRE"
+// ---------------------------------------------------------------------------
+
+const NODE_B_POLL_MS     = 3000;
+const NODE_B_STALE_MS    = 30000;  // >30 s without fresh data = "No Signal"
+const NODE_B_HISTORY_MAX = 50;
+
+let   nodeBPollTimer     = null;
+const nodeBHistory       = [];    // rolling buffer, newest at index 0
+
+const GAUGE_FULL = 157;           // SVG semi-circle arc length (px)
+
+// ---------------------------------------------------------------------------
+// Initialise poller on DOMContentLoaded
+// ---------------------------------------------------------------------------
+document.addEventListener("DOMContentLoaded", () => {
+  initNodeBPoller();
+});
+
+function initNodeBPoller() {
+  pollNodeBLatest();
+  nodeBPollTimer = setInterval(pollNodeBLatest, NODE_B_POLL_MS);
+}
+
+// ---------------------------------------------------------------------------
+// Hook into existing SSE dispatcher for real-time push updates
+// ---------------------------------------------------------------------------
+const _origHandleStreamPayload = handleStreamPayload;
+// Re-define handleStreamPayload so SSE-pushed lora_reading events also render
+function handleStreamPayload(data) {          // eslint-disable-line no-redeclare
+  _origHandleStreamPayload(data);
+  if (data.type === "lora_reading" && data.reading) {
+    renderNodeBReading(data.reading, true);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Polling
+// ---------------------------------------------------------------------------
+async function pollNodeBLatest() {
+  try {
+    const res = await fetch("/api/fire/latest");
+
+    if (res.status === 404) {
+      setNodeBStatus("waiting", "Waiting for first LoRa packet from Node B...");
+      setNodeBLiveBadge("waiting", "Waiting...");
+      return;
+    }
+
+    if (!res.ok) {
+      setNodeBStatus("error", "Server error (HTTP " + res.status + "). Check Flask backend.");
+      setNodeBLiveBadge("offline", "Error");
+      return;
+    }
+
+    const json    = await res.json();
+    const reading = json.reading;
+    if (!reading) {
+      setNodeBStatus("error", "Invalid response from server.");
+      return;
+    }
+
+    // Staleness check
+    const serverTs = reading.server_ts ? new Date(reading.server_ts).getTime() : null;
+    const ageMs    = serverTs ? Date.now() - serverTs : Infinity;
+    if (ageMs > NODE_B_STALE_MS) {
+      setNodeBLiveBadge("offline", "● No Signal");
+    } else {
+      setNodeBLiveBadge("live", "● Live");
+    }
+
+    renderNodeBReading(reading, false);
+    hideNodeBStatusMsg();
+
+  } catch (err) {
+    console.error("[NodeB] Fetch error:", err);
+    setNodeBStatus("error", "Connection error — cannot reach server.");
+    setNodeBLiveBadge("offline", "● No Signal");
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Main render function
+// ---------------------------------------------------------------------------
+function renderNodeBReading(r, isNew) {
+
+  // --- Fire Status Banner ---
+  const banner     = document.getElementById("nodeBFireBanner");
+  const statusTxt  = document.getElementById("nodeBFireStatusText");
+  const bannerIcon = document.getElementById("nodeBBannerIcon");
+  const status     = (r.fire_status || "NORMAL").toUpperCase();
+
+  if (banner) {
+    const bCls = { FIRE: "nodeb-banner-fire", WARNING: "nodeb-banner-warning", NORMAL: "nodeb-banner-normal" };
+    banner.className = "nodeb-fire-banner " + (bCls[status] || "nodeb-banner-normal");
+  }
+  if (statusTxt)  statusTxt.textContent = status;
+  if (bannerIcon) {
+    const iMap = { FIRE: "flame", WARNING: "alert-triangle", NORMAL: "shield-check" };
+    bannerIcon.setAttribute("data-lucide", iMap[status] || "shield-check");
+  }
+
+  // Trend badge
+  const trend      = r.trend || "";
+  const trendBadge = document.getElementById("nodeBTrendBadge");
+  if (trendBadge) {
+    const tMap = { RISING: "↗ RISING", STABLE: "→ STABLE", FALLING: "↘ FALLING" };
+    trendBadge.textContent = tMap[trend] || trend || "—";
+    trendBadge.className   = "nodeb-trend-badge nodeb-trend-" + trend.toLowerCase();
+  }
+
+  // Smoothed probability (in banner)
+  const smoothedEl = document.getElementById("nodeBSmoothedProb");
+  if (smoothedEl && r.smoothed_probability != null) {
+    smoothedEl.textContent = (r.smoothed_probability * 100).toFixed(1) + "%";
+  }
+
+  // Packet ID (in banner)
+  const pktEl = document.getElementById("nodeBPacketId");
+  if (pktEl) pktEl.textContent = r.packet_id != null ? "#" + r.packet_id : "—";
+
+  // Helper
+  const setEl = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+
+  // --- Sensor metric cards ---
+  if (r.temperature != null) setEl("nodeBTemp",     r.temperature.toFixed(1));
+  if (r.humidity    != null) setEl("nodeBHum",      r.humidity.toFixed(1));
+  if (r.mq2         != null) setEl("nodeBMQ2",      Math.round(r.mq2));
+  if (r.temp_rate   != null) setEl("nodeBTempRate", "Rate: " + (r.temp_rate >= 0 ? "+" : "") + r.temp_rate.toFixed(3) + "°C/s");
+  if (r.mq2_rate    != null) setEl("nodeBMQ2Rate",  "Rate: " + (r.mq2_rate  >= 0 ? "+" : "") + r.mq2_rate.toFixed(2)  + "/s");
+
+  // --- SVG Probability Gauge ---
+  const probPct  = r.fire_probability != null ? Math.max(0, Math.min(1, r.fire_probability)) : 0;
+  const gaugeArc = document.getElementById("nodeBGaugeArc");
+  if (gaugeArc) {
+    gaugeArc.setAttribute("stroke-dashoffset", (GAUGE_FULL * (1 - probPct)).toFixed(1));
+    gaugeArc.setAttribute("stroke", probPct >= 0.7 ? "#ef4444" : probPct >= 0.4 ? "#f59e0b" : "#10b981");
+  }
+  setEl("nodeBFireProb", (probPct * 100).toFixed(1) + "%");
+
+  // --- LoRa Signal Quality ---
+  if (r.lora_rssi != null) setEl("nodeBRSSI", r.lora_rssi);
+  if (r.lora_snr  != null) setEl("nodeBSNR",  r.lora_snr);
+  const qualityEl = document.getElementById("nodeBSignalQuality");
+  if (qualityEl) {
+    const rssi = r.lora_rssi || 0;
+    const qual = rssi >= -60 ? "Excellent" : rssi >= -75 ? "Good" : rssi >= -90 ? "Fair" : "Weak";
+    qualityEl.textContent = "Signal quality: " + qual;
+  }
+
+  // --- Node meta ---
+  setEl("nodeBNodeId",    r.node_id    != null ? "NODE_" + r.node_id    : "—");
+  setEl("nodeBGatewayId", r.gateway_id != null ? "NODE_" + r.gateway_id : "—");
+  setEl("nodeBNodeTs",    r.node_ts    != null ? formatUptimeMs(r.node_ts) : "—");
+
+  const rxTime = r.rx_ts
+    ? new Date(r.rx_ts).toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : "—";
+  setEl("nodeBRxTime", rxTime);
+
+  // Re-render Lucide icons (data-lucide attr may have changed)
+  initLucide();
+
+  // --- Rolling history buffer & table ---
+  if (isNew) {
+    nodeBHistory.unshift(r);
+    if (nodeBHistory.length > NODE_B_HISTORY_MAX) nodeBHistory.pop();
+    prependNodeBHistoryRow(r, rxTime);
+  } else if (nodeBHistory.length === 0) {
+    // First load from poll — seed the table with the single reading
+    nodeBHistory.unshift(r);
+    prependNodeBHistoryRow(r, rxTime);
+  }
+
+  // Update Node B map marker
+  updateNodeBMarker(r);
+
+  // Reveal history card
+  const card = document.getElementById("nodeBHistoryCard");
+  if (card) card.style.display = "";
+}
+
+// ---------------------------------------------------------------------------
+// History table row builder
+// ---------------------------------------------------------------------------
+function prependNodeBHistoryRow(r, rxTime) {
+  const tbody = document.getElementById("nodeBHistoryBody");
+  if (!tbody) return;
+  const emptyRow = tbody.querySelector(".empty-row");
+  if (emptyRow) emptyRow.remove();
+
+  const status = (r.fire_status || "NORMAL").toUpperCase();
+  const badges = {
+    FIRE:    '<span class="badge-fire">🔥 FIRE</span>',
+    WARNING: '<span class="badge-warning">⚠ WARNING</span>',
+    NORMAL:  '<span class="badge-safe">NORMAL</span>',
+  };
+  const badge   = badges[status] || ('<span class="badge-safe">' + status + "</span>");
+  const prob    = r.fire_probability != null ? (r.fire_probability * 100).toFixed(1) + "%" : "—";
+  const rssiSnr = (r.lora_rssi != null ? r.lora_rssi : "—") + " / " + (r.lora_snr != null ? r.lora_snr : "—");
+
+  const tr = document.createElement("tr");
+  if (status === "FIRE")    tr.className = "row-fire";
+  if (status === "WARNING") tr.className = "row-suppressed";
+
+  tr.innerHTML =
+    "<td class='text-mono'>" + rxTime + "</td>" +
+    "<td class='text-mono'>" + (r.packet_id != null ? "#" + r.packet_id : "—") + "</td>" +
+    "<td>" + badge + "</td>" +
+    "<td class='text-mono'>" + prob + "</td>" +
+    "<td class='text-mono'>" + (r.trend || "—") + "</td>" +
+    "<td class='text-mono'>" + (r.temperature != null ? r.temperature.toFixed(1) : "—") + "</td>" +
+    "<td class='text-mono'>" + (r.humidity    != null ? r.humidity.toFixed(1) + "%" : "—") + "</td>" +
+    "<td class='text-mono'>" + (r.mq2         != null ? Math.round(r.mq2) : "—") + "</td>" +
+    "<td class='text-mono'>" + rssiSnr + "</td>";
+
+  tbody.insertBefore(tr, tbody.firstChild);
+
+  // Cap DOM rows
+  while (tbody.children.length > NODE_B_HISTORY_MAX) {
+    tbody.removeChild(tbody.lastChild);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Status / live-badge helpers
+// ---------------------------------------------------------------------------
+function setNodeBLiveBadge(state, text) {
+  const badge = document.getElementById("nodeBLiveIndicator");
+  const label = document.getElementById("nodeBLiveText");
+  if (label) label.textContent = text;
+  if (badge) {
+    const stateMap = { live: "nodeb-live", offline: "nodeb-offline", waiting: "nodeb-waiting" };
+    badge.className = "nodeb-live-badge " + (stateMap[state] || "nodeb-waiting");
+  }
+}
+
+function setNodeBStatus(type, msg) {
+  const el   = document.getElementById("nodeBStatusMsg");
+  const text = document.getElementById("nodeBStatusMsgText");
+  if (!el) return;
+  el.style.display = "";
+  el.className     = "nodeb-status-msg nodeb-msg-" + type;
+  if (text) text.textContent = msg;
+}
+
+function hideNodeBStatusMsg() {
+  const el = document.getElementById("nodeBStatusMsg");
+  if (el) el.style.display = "none";
+}
+
+// ---------------------------------------------------------------------------
+// Utility: format node uptime milliseconds → human-readable string
+// ---------------------------------------------------------------------------
+function formatUptimeMs(ms) {
+  if (ms == null) return "—";
+  const s = Math.floor(ms / 1000);
+  if (s < 60)   return s + "s";
+  if (s < 3600) return Math.floor(s / 60) + "m " + (s % 60) + "s";
+  return Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m";
 }

@@ -3,8 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>🔥 PyroWatch — Real-Time Forest Fire Alert & Sensor Monitoring</title>
-  <meta name="description" content="Local AI-powered forest fire monitoring dashboard with live ESP32 serial telemetry, real-time Chart.js tracking, safety suppression diagnostics, and automated Twilio SMS dispatch.">
+  <title>🌍 Disaster Management and Prediction — Real-Time Forest Fire Alert & Sensor Monitoring</title>
+  <meta name="description" content="AI-powered disaster management and prediction dashboard with live ESP32 LoRa telemetry, real-time Chart.js tracking, fire inference diagnostics, and automated Twilio SMS dispatch.">
 
   <!-- Google Fonts: Inter & Outfit -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -16,6 +16,10 @@
 
   <!-- Lucide Icons -->
   <script src="https://unpkg.com/lucide@latest"></script>
+
+  <!-- Leaflet CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 
   <!-- Stylesheet -->
   <link rel="stylesheet" href="/static/dashboard.css">
@@ -32,8 +36,8 @@
         <i data-lucide="flame" class="brand-icon"></i>
       </div>
       <div class="brand-text">
-        <h1 class="brand-title">PyroWatch <span class="badge-tag">AI Edge</span></h1>
-        <p class="brand-subtitle">ESP32 Forest Fire Early Detection & SMS Dispatch</p>
+        <h1 class="brand-title">Disaster Management <span class="badge-tag">& Prediction</span></h1>
+        <p class="brand-subtitle">ESP32 LoRa IoT Forest Fire Early Warning & SMS Dispatch System</p>
       </div>
     </div>
 
@@ -253,6 +257,227 @@
         <div id="recipientsList" class="recipients-list">
           <div class="recipients-loading">Loading registered recipients...</div>
         </div>
+      </div>
+    </section>
+
+    <!-- ======================================================= -->
+    <!-- LoRa Node B — HTTP-Polled Live Fire Intelligence Panel  -->
+    <!-- ======================================================= -->
+    <section class="lora-nodeb-section" id="loraNodeBSection">
+
+      <!-- Section Header -->
+      <div class="lora-section-header">
+        <div class="lora-section-heading">
+          <div class="lora-section-icon-wrap">
+            <i data-lucide="radio" class="lora-section-icon"></i>
+          </div>
+          <div>
+            <h2 class="lora-section-title">LoRa Node B — Live Fire Intelligence</h2>
+            <p class="lora-section-sub">HTTP-gateway telemetry from ESP32 LoRa field sensor · POST /api/fire</p>
+          </div>
+        </div>
+        <div class="lora-section-badges">
+          <div id="nodeBLiveIndicator" class="nodeb-live-badge nodeb-waiting">
+            <span class="nodeb-dot"></span>
+            <span id="nodeBLiveText">Waiting...</span>
+          </div>
+          <span class="nodeb-poll-note">Polling every 3s</span>
+        </div>
+      </div>
+
+      <!-- Fire Status Banner (Node B) -->
+      <div id="nodeBFireBanner" class="nodeb-fire-banner nodeb-banner-normal">
+        <div class="nodeb-banner-inner">
+          <i id="nodeBBannerIcon" data-lucide="shield-check" class="nodeb-banner-icon"></i>
+          <div class="nodeb-banner-text">
+            <span class="nodeb-banner-label">NODE B FIRE STATUS</span>
+            <span id="nodeBFireStatusText" class="nodeb-banner-value">AWAITING DATA</span>
+          </div>
+          <div class="nodeb-banner-meta">
+            <span class="nodeb-banner-meta-label">Trend</span>
+            <span id="nodeBTrendBadge" class="nodeb-trend-badge">—</span>
+          </div>
+          <div class="nodeb-banner-meta">
+            <span class="nodeb-banner-meta-label">Smoothed Prob</span>
+            <span id="nodeBSmoothedProb" class="nodeb-banner-meta-val">—</span>
+          </div>
+          <div class="nodeb-banner-meta">
+            <span class="nodeb-banner-meta-label">Packet #</span>
+            <span id="nodeBPacketId" class="nodeb-banner-meta-val">—</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Node B Sensor Cards Grid -->
+      <div class="nodeb-cards-grid">
+
+        <!-- Temperature -->
+        <div class="nodeb-card">
+          <div class="nodeb-card-top">
+            <span class="nodeb-card-title">Temperature</span>
+            <div class="icon-box icon-orange"><i data-lucide="thermometer"></i></div>
+          </div>
+          <div class="nodeb-val-row">
+            <span id="nodeBTemp" class="nodeb-val">--.-</span>
+            <span class="nodeb-unit">°C</span>
+          </div>
+          <div class="nodeb-card-footer">
+            <span class="rate-badge" id="nodeBTempRate">Rate: ---</span>
+          </div>
+        </div>
+
+        <!-- Humidity -->
+        <div class="nodeb-card">
+          <div class="nodeb-card-top">
+            <span class="nodeb-card-title">Humidity</span>
+            <div class="icon-box icon-blue"><i data-lucide="droplets"></i></div>
+          </div>
+          <div class="nodeb-val-row">
+            <span id="nodeBHum" class="nodeb-val">--.-</span>
+            <span class="nodeb-unit">%</span>
+          </div>
+          <div class="nodeb-card-footer">
+            <span class="status-note">Relative Humidity</span>
+          </div>
+        </div>
+
+        <!-- MQ-2 Smoke/Gas -->
+        <div class="nodeb-card">
+          <div class="nodeb-card-top">
+            <span class="nodeb-card-title">MQ-2 Smoke / Gas</span>
+            <div class="icon-box icon-purple"><i data-lucide="wind"></i></div>
+          </div>
+          <div class="nodeb-val-row">
+            <span id="nodeBMQ2" class="nodeb-val">---</span>
+            <span class="nodeb-unit">ADC</span>
+          </div>
+          <div class="nodeb-card-footer">
+            <span class="rate-badge" id="nodeBMQ2Rate">Rate: ---</span>
+          </div>
+        </div>
+
+        <!-- Fire Probability Gauge -->
+        <div class="nodeb-card nodeb-prob-card">
+          <div class="nodeb-card-top">
+            <span class="nodeb-card-title">Fire Probability</span>
+            <div class="icon-box icon-orange"><i data-lucide="flame"></i></div>
+          </div>
+          <div class="nodeb-prob-gauge-wrap">
+            <svg class="nodeb-gauge-svg" viewBox="0 0 120 70" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10 65 A 50 50 0 0 1 110 65" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10" stroke-linecap="round"/>
+              <path id="nodeBGaugeArc" d="M10 65 A 50 50 0 0 1 110 65" fill="none" stroke="#10b981" stroke-width="10" stroke-linecap="round"
+                stroke-dasharray="157" stroke-dashoffset="157"/>
+            </svg>
+            <div class="nodeb-gauge-center">
+              <span id="nodeBFireProb" class="nodeb-gauge-pct">0%</span>
+              <span class="nodeb-gauge-label">Raw Prob</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- LoRa Signal Quality -->
+        <div class="nodeb-card">
+          <div class="nodeb-card-top">
+            <span class="nodeb-card-title">LoRa Signal</span>
+            <div class="icon-box icon-blue"><i data-lucide="signal"></i></div>
+          </div>
+          <div class="nodeb-signal-grid">
+            <div class="nodeb-sig-item">
+              <span class="nodeb-sig-label">RSSI</span>
+              <span id="nodeBRSSI" class="nodeb-sig-val">—</span>
+              <span class="nodeb-sig-unit">dBm</span>
+            </div>
+            <div class="nodeb-sig-item">
+              <span class="nodeb-sig-label">SNR</span>
+              <span id="nodeBSNR" class="nodeb-sig-val">—</span>
+              <span class="nodeb-sig-unit">dB</span>
+            </div>
+          </div>
+          <div class="nodeb-card-footer">
+            <span class="status-note" id="nodeBSignalQuality">Signal quality: —</span>
+          </div>
+        </div>
+
+        <!-- Node & Packet Meta -->
+        <div class="nodeb-card">
+          <div class="nodeb-card-top">
+            <span class="nodeb-card-title">Node Info</span>
+            <div class="icon-box icon-purple"><i data-lucide="cpu"></i></div>
+          </div>
+          <div class="nodeb-meta-list">
+            <div class="nodeb-meta-row">
+              <span class="nodeb-meta-label">Node A ID</span>
+              <span id="nodeBNodeId" class="nodeb-meta-val">—</span>
+            </div>
+            <div class="nodeb-meta-row">
+              <span class="nodeb-meta-label">Gateway ID</span>
+              <span id="nodeBGatewayId" class="nodeb-meta-val">—</span>
+            </div>
+            <div class="nodeb-meta-row">
+              <span class="nodeb-meta-label">Node Uptime</span>
+              <span id="nodeBNodeTs" class="nodeb-meta-val">—</span>
+            </div>
+            <div class="nodeb-meta-row">
+              <span class="nodeb-meta-label">Last Received</span>
+              <span id="nodeBRxTime" class="nodeb-meta-val">—</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+      <!-- /nodeb-cards-grid -->
+
+      <!-- Node B Error / Status Messages -->
+      <div id="nodeBStatusMsg" class="nodeb-status-msg nodeb-msg-waiting">
+        <i data-lucide="loader" class="icon-sm nodeb-spin"></i>
+        <span id="nodeBStatusMsgText">Waiting for first LoRa packet from Node B...</span>
+      </div>
+
+      <!-- Node B Recent Packets Table -->
+      <div class="card nodeb-history-card" id="nodeBHistoryCard" style="display:none;">
+        <div class="card-header">
+          <div class="card-heading-group">
+            <h3 class="card-title"><i data-lucide="list" class="icon-sm"></i> Node B Recent Packets</h3>
+            <p class="card-sub">Rolling buffer of last 50 LoRa packets received via Node B HTTP gateway</p>
+          </div>
+          <span class="live-pulse-dot"></span>
+        </div>
+        <div class="table-wrapper">
+          <table id="nodeBHistoryTable">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Packet #</th>
+                <th>Status</th>
+                <th>Probability</th>
+                <th>Trend</th>
+                <th>Temp (°C)</th>
+                <th>Humidity</th>
+                <th>MQ-2</th>
+                <th>RSSI / SNR</th>
+              </tr>
+            </thead>
+            <tbody id="nodeBHistoryBody">
+              <tr class="empty-row"><td colspan="9">No packets yet...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <!-- /nodeb-history-card -->
+
+    </section>
+    <!-- /lora-nodeb-section -->
+
+    <!-- OpenStreetMap Section -->
+    <section class="card map-card" style="margin-bottom: 1.5rem;">
+      <div class="card-header">
+        <div class="card-heading-group">
+          <h3 class="card-title"><i data-lucide="map" class="icon-sm"></i> Live Sensor Map (OpenStreetMap)</h3>
+          <p class="card-sub">Geographic location of active LoRa sensors</p>
+        </div>
+      </div>
+      <div class="map-wrapper" style="height: 400px; width: 100%; border-radius: 8px; overflow: hidden; margin-top: 1rem; position: relative; z-index: 1;">
+        <div id="sensorMap" style="height: 100%; width: 100%;"></div>
       </div>
     </section>
 
