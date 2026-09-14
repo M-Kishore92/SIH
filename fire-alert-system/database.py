@@ -81,6 +81,20 @@ def init_db():
         except Exception:
             pass
 
+        # Add ESP32 Node B fields
+        try:
+            conn.executescript("""
+                ALTER TABLE events ADD COLUMN rssi REAL;
+                ALTER TABLE events ADD COLUMN snr REAL;
+                ALTER TABLE events ADD COLUMN packet_id INTEGER;
+                ALTER TABLE events ADD COLUMN node_timestamp INTEGER;
+                ALTER TABLE events ADD COLUMN trend TEXT;
+                ALTER TABLE events ADD COLUMN raw_probability REAL;
+                ALTER TABLE events ADD COLUMN fire_status TEXT;
+            """)
+        except Exception:
+            pass
+
         # Seed TWILIO_TO_NUMBER from config if recipients table is empty
         if config.TWILIO_TO_NUMBER:
             try:
@@ -112,10 +126,12 @@ def insert_event(event: dict) -> Optional[int]:
     sql = """
         INSERT INTO events
             (timestamp, temp, humidity, mq2, baseline, delta,
-             temp_rate, mq2_rate, prediction, confidence, safety_suppressed, node_id)
+             temp_rate, mq2_rate, prediction, confidence, safety_suppressed, node_id,
+             rssi, snr, packet_id, node_timestamp, trend, raw_probability, fire_status)
         VALUES
             (:timestamp, :temp, :humidity, :mq2, :baseline, :delta,
-             :temp_rate, :mq2_rate, :prediction, :confidence, :safety_suppressed, :node_id)
+             :temp_rate, :mq2_rate, :prediction, :confidence, :safety_suppressed, :node_id,
+             :rssi, :snr, :packet_id, :node_timestamp, :trend, :raw_probability, :fire_status)
     """
     with _get_conn() as conn:
         cur = conn.execute(sql, {
@@ -131,6 +147,13 @@ def insert_event(event: dict) -> Optional[int]:
             "confidence":       event.get("confidence"),
             "safety_suppressed": 1 if event.get("safety_suppressed") else 0,
             "node_id":          event.get("node_id", "ESP32-LORA-NODE-01"),
+            "rssi":             event.get("rssi"),
+            "snr":              event.get("snr"),
+            "packet_id":        event.get("packet_id"),
+            "node_timestamp":   event.get("node_timestamp"),
+            "trend":            event.get("trend"),
+            "raw_probability":  event.get("raw_probability"),
+            "fire_status":      event.get("fire_status"),
         })
         row_id = cur.lastrowid
     log.debug(f"Inserted event id={row_id}, prediction={event.get('prediction')}")
@@ -164,7 +187,8 @@ def fetch_recent_events(limit: int = 100) -> list[dict]:
     """
     sql = """
         SELECT id, timestamp, temp, humidity, mq2, baseline, delta,
-               temp_rate, mq2_rate, prediction, confidence, safety_suppressed, node_id
+               temp_rate, mq2_rate, prediction, confidence, safety_suppressed, node_id,
+               rssi, snr, packet_id, node_timestamp, trend, raw_probability, fire_status
         FROM events
         ORDER BY id DESC
         LIMIT ?
@@ -178,7 +202,8 @@ def fetch_latest_event() -> Optional[dict]:
     """Return the single most recent reading, or None if no data yet."""
     sql = """
         SELECT id, timestamp, temp, humidity, mq2, baseline, delta,
-               temp_rate, mq2_rate, prediction, confidence, safety_suppressed, node_id
+               temp_rate, mq2_rate, prediction, confidence, safety_suppressed, node_id,
+               rssi, snr, packet_id, node_timestamp, trend, raw_probability, fire_status
         FROM events
         ORDER BY id DESC
         LIMIT 1

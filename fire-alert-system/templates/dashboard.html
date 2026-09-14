@@ -261,7 +261,7 @@
     </section>
 
     <!-- ======================================================= -->
-    <!-- LoRa Node B — HTTP-Polled Live Fire Intelligence Panel  -->
+    <!-- Live ESP32 Sensor Data  -->
     <!-- ======================================================= -->
     <section class="lora-nodeb-section" id="loraNodeBSection">
 
@@ -272,16 +272,15 @@
             <i data-lucide="radio" class="lora-section-icon"></i>
           </div>
           <div>
-            <h2 class="lora-section-title">LoRa Node B — Live Fire Intelligence</h2>
-            <p class="lora-section-sub">HTTP-gateway telemetry from ESP32 LoRa field sensor · POST /api/fire</p>
+            <h2 class="lora-section-title">Live ESP32 Sensor Data</h2>
+            <p class="lora-section-sub">Wi-Fi HTTP gateway telemetry from ESP32 Node B · POST /api/sensor-data</p>
           </div>
         </div>
         <div class="lora-section-badges">
-          <div id="nodeBLiveIndicator" class="nodeb-live-badge nodeb-waiting">
+          <div id="nodeBLiveIndicator" class="nodeb-live-badge nodeb-offline">
             <span class="nodeb-dot"></span>
-            <span id="nodeBLiveText">Waiting...</span>
+            <span id="nodeBLiveText">● ESP32 OFFLINE</span>
           </div>
-          <span class="nodeb-poll-note">Polling every 3s</span>
         </div>
       </div>
 
@@ -430,7 +429,7 @@
       <!-- Node B Error / Status Messages -->
       <div id="nodeBStatusMsg" class="nodeb-status-msg nodeb-msg-waiting">
         <i data-lucide="loader" class="icon-sm nodeb-spin"></i>
-        <span id="nodeBStatusMsgText">Waiting for first LoRa packet from Node B...</span>
+        <span id="nodeBStatusMsgText">Waiting for first ESP32 packet...</span>
       </div>
 
       <!-- Node B Recent Packets Table -->

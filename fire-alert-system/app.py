@@ -17,6 +17,7 @@ import queue
 import sys
 import threading
 import time
+from datetime import datetime, timezone
 from typing import Set
 
 from flask import Flask, Response, jsonify, render_template, request
@@ -282,6 +283,61 @@ def sse_stream():
             "Connection": "keep-alive",
         },
     )
+
+
+@app.route("/api/sensor-data", methods=["POST"])
+def receive_sensor_data():
+    """
+    Receive telemetry directly from ESP32 via Wi-Fi/HTTP.
+    """
+    if not request.is_json:
+        return jsonify({"status": "error", "message": "Content-Type must be application/json"}), 400
+
+    data = request.get_json(silent=True)
+    if not data:
+        return jsonify({"status": "error", "message": "Invalid JSON"}), 400
+
+    api_key = request.headers.get("X-ESP32-API-Key")
+    if config.ESP32_API_KEY and api_key != config.ESP32_API_KEY:
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+
+    try:
+        esp_status = data.get("status", "NORMAL")
+        # Map prediction based on status string (worker expects "FIRE")
+        prediction = "FIRE" if "FIRE" in esp_status.upper() else "NOT FIRE"
+
+        event = {
+            "type": "reading",
+            "temp": float(data.get("temperature", 0.0)),
+            "humidity": float(data.get("humidity", 0.0)),
+            "mq2": float(data.get("mq2", 0.0)),
+            "temp_rate": float(data.get("temp_rate", 0.0)),
+            "mq2_rate": float(data.get("mq2_rate", 0.0)),
+            "delta": 0.0,
+            "confidence": float(data.get("smoothed_probability", 0.0)) * 100,
+            "raw_probability": float(data.get("raw_probability", 0.0)),
+            "trend": str(data.get("trend", "—")),
+            "fire_status": esp_status,
+            "prediction": prediction,
+            "safety_suppressed": False,
+            "node_id": str(data.get("node_id", "ESP32-NODE")),
+            "rssi": float(data.get("rssi", 0.0)),
+            "snr": float(data.get("snr", 0.0)),
+            "packet_id": data.get("packet_id"),
+            "node_timestamp": data.get("node_timestamp"),
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
+    except (ValueError, TypeError) as e:
+        return jsonify({"status": "error", "message": f"Invalid field type: {e}"}), 400
+
+    try:
+        event_queue.put_nowait(event)
+        log.info(f"[ESP32] Node {event['node_id']} | Packet {event['packet_id']} | Temp {event['temp']}C | Hum {event['humidity']}% | MQ2 {event['mq2']} | Risk {event['confidence']:.1f}% | {event['trend']} | {event['fire_status']}")
+    except queue.Full:
+        log.warning("Event queue full, dropping ESP32 HTTP reading")
+        return jsonify({"status": "error", "message": "Queue full"}), 503
+
+    return jsonify({"status": "ok", "message": "Data received"}), 200
 
 
 # ---------------------------------------------------------------------------

@@ -33,6 +33,12 @@ BAUD_RATE: int = 115200
 DATABASE_PATH: str = os.getenv("DATABASE_PATH", "fire_alerts.db")
 
 # ---------------------------------------------------------------------------
+# API Authentication
+# ---------------------------------------------------------------------------
+ESP32_API_KEY: str = os.getenv("ESP32_API_KEY", "change-this-secret")
+
+
+# ---------------------------------------------------------------------------
 # Twilio credentials  (loaded from .env — do NOT hard-code here)
 # ---------------------------------------------------------------------------
 TWILIO_ACCOUNT_SID: str    = os.getenv("TWILIO_ACCOUNT_SID", "")
@@ -54,7 +60,7 @@ TWILIO_WHATSAPP_FROM: str  = os.getenv("TWILIO_WHATSAPP_FROM", "whatsapp:+141552
 SMS_DEBOUNCE_SECONDS: int  = int(os.getenv("SMS_DEBOUNCE_SECONDS", "120"))
 SMS_SEND_ONCE: bool         = os.getenv("SMS_SEND_ONCE", "true").lower() == "true"
 AUTO_DISPATCH_ENABLED: bool = os.getenv("AUTO_DISPATCH_ENABLED", "false").lower() == "true"
-MOCK_LOOP_FOREVER: bool     = os.getenv("MOCK_LOOP_FOREVER", "true").lower() == "true"
+MOCK_LOOP_FOREVER: bool     = os.getenv("MOCK_LOOP_FOREVER", "false").lower() == "true"  # single-pass
 
 # ---------------------------------------------------------------------------
 # Flask
@@ -67,4 +73,4 @@ FLASK_DEBUG: bool = os.getenv("FLASK_DEBUG", "false").lower() == "true"
 # Mock / demo mode replay file
 # ---------------------------------------------------------------------------
 MOCK_REPLAY_FILE: str = os.getenv("MOCK_REPLAY_FILE", "mock_data.txt")
-MOCK_LINE_DELAY_SECONDS: float = float(os.getenv("MOCK_LINE_DELAY_SECONDS", "1.0"))
+MOCK_LINE_DELAY_SECONDS: float = float(os.getenv("MOCK_LINE_DELAY_SECONDS", "0.48"))  # 31 readings × 0.48s ≈ 15s rolling window

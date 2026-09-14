@@ -979,66 +979,44 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 function initNodeBPoller() {
-  pollNodeBLatest();
-  nodeBPollTimer = setInterval(pollNodeBLatest, NODE_B_POLL_MS);
+  // Polling removed. Now driven entirely by SSE new_reading events.
+}
+
+let esp32TimeoutTimer = null;
+function resetNodeBTimer() {
+  setNodeBLiveBadge("live", "● ESP32 LIVE");
+  hideNodeBStatusMsg();
+  
+  if (esp32TimeoutTimer) clearTimeout(esp32TimeoutTimer);
+  
+  esp32TimeoutTimer = setTimeout(() => {
+    setNodeBLiveBadge("offline", "● ESP32 OFFLINE");
+  }, 15000);
 }
 
 // ---------------------------------------------------------------------------
 // Hook into existing SSE dispatcher for real-time push updates
 // ---------------------------------------------------------------------------
 const _origHandleStreamPayload = handleStreamPayload;
-// Re-define handleStreamPayload so SSE-pushed lora_reading events also render
+// Re-define handleStreamPayload so SSE-pushed new_reading events from ESP32 route to Node B
 function handleStreamPayload(data) {          // eslint-disable-line no-redeclare
+  if (data.type === "new_reading" && data.event && data.event.packet_id !== undefined) {
+    // This is an ESP32 event mapped to the reading format
+    renderNodeBReading(data.event, true);
+    resetNodeBTimer();
+    
+    // Also trigger master status alert if FIRE
+    const isSuppressed = !!data.event.safety_suppressed;
+    updateMasterStatus(data.event.prediction, isSuppressed, data.event.confidence, new Date().toLocaleTimeString());
+    
+    // Node A chart/metrics should NOT be updated by ESP32 HTTP data, so we don't call _origHandleStreamPayload
+    return;
+  }
+  
   _origHandleStreamPayload(data);
-  if (data.type === "lora_reading" && data.reading) {
-    renderNodeBReading(data.reading, true);
-  }
 }
 
-// ---------------------------------------------------------------------------
-// Polling
-// ---------------------------------------------------------------------------
-async function pollNodeBLatest() {
-  try {
-    const res = await fetch("/api/fire/latest");
-
-    if (res.status === 404) {
-      setNodeBStatus("waiting", "Waiting for first LoRa packet from Node B...");
-      setNodeBLiveBadge("waiting", "Waiting...");
-      return;
-    }
-
-    if (!res.ok) {
-      setNodeBStatus("error", "Server error (HTTP " + res.status + "). Check Flask backend.");
-      setNodeBLiveBadge("offline", "Error");
-      return;
-    }
-
-    const json    = await res.json();
-    const reading = json.reading;
-    if (!reading) {
-      setNodeBStatus("error", "Invalid response from server.");
-      return;
-    }
-
-    // Staleness check
-    const serverTs = reading.server_ts ? new Date(reading.server_ts).getTime() : null;
-    const ageMs    = serverTs ? Date.now() - serverTs : Infinity;
-    if (ageMs > NODE_B_STALE_MS) {
-      setNodeBLiveBadge("offline", "● No Signal");
-    } else {
-      setNodeBLiveBadge("live", "● Live");
-    }
-
-    renderNodeBReading(reading, false);
-    hideNodeBStatusMsg();
-
-  } catch (err) {
-    console.error("[NodeB] Fetch error:", err);
-    setNodeBStatus("error", "Connection error — cannot reach server.");
-    setNodeBLiveBadge("offline", "● No Signal");
-  }
-}
+// Polling functions removed for ESP32 HTTP Integration
 
 // ---------------------------------------------------------------------------
 // Main render function
@@ -1072,8 +1050,8 @@ function renderNodeBReading(r, isNew) {
 
   // Smoothed probability (in banner)
   const smoothedEl = document.getElementById("nodeBSmoothedProb");
-  if (smoothedEl && r.smoothed_probability != null) {
-    smoothedEl.textContent = (r.smoothed_probability * 100).toFixed(1) + "%";
+  if (smoothedEl && r.confidence != null) {
+    smoothedEl.textContent = r.confidence.toFixed(1) + "%";
   }
 
   // Packet ID (in banner)
@@ -1087,14 +1065,14 @@ function renderNodeBReading(r, isNew) {
   };
 
   // --- Sensor metric cards ---
-  if (r.temperature != null) setEl("nodeBTemp",     r.temperature.toFixed(1));
+  if (r.temp != null) setEl("nodeBTemp",     r.temp.toFixed(1));
   if (r.humidity    != null) setEl("nodeBHum",      r.humidity.toFixed(1));
   if (r.mq2         != null) setEl("nodeBMQ2",      Math.round(r.mq2));
   if (r.temp_rate   != null) setEl("nodeBTempRate", "Rate: " + (r.temp_rate >= 0 ? "+" : "") + r.temp_rate.toFixed(3) + "°C/s");
   if (r.mq2_rate    != null) setEl("nodeBMQ2Rate",  "Rate: " + (r.mq2_rate  >= 0 ? "+" : "") + r.mq2_rate.toFixed(2)  + "/s");
 
   // --- SVG Probability Gauge ---
-  const probPct  = r.fire_probability != null ? Math.max(0, Math.min(1, r.fire_probability)) : 0;
+  const probPct  = r.raw_probability != null ? Math.max(0, Math.min(1, r.raw_probability)) : 0;
   const gaugeArc = document.getElementById("nodeBGaugeArc");
   if (gaugeArc) {
     gaugeArc.setAttribute("stroke-dashoffset", (GAUGE_FULL * (1 - probPct)).toFixed(1));
@@ -1115,10 +1093,10 @@ function renderNodeBReading(r, isNew) {
   // --- Node meta ---
   setEl("nodeBNodeId",    r.node_id    != null ? "NODE_" + r.node_id    : "—");
   setEl("nodeBGatewayId", r.gateway_id != null ? "NODE_" + r.gateway_id : "—");
-  setEl("nodeBNodeTs",    r.node_ts    != null ? formatUptimeMs(r.node_ts) : "—");
+  setEl("nodeBNodeTs",    r.node_timestamp    != null ? formatUptimeMs(r.node_timestamp) : "—");
 
-  const rxTime = r.rx_ts
-    ? new Date(r.rx_ts).toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+  const rxTime = r.timestamp
+    ? new Date(r.timestamp).toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
     : "—";
   setEl("nodeBRxTime", rxTime);
 
@@ -1160,7 +1138,7 @@ function prependNodeBHistoryRow(r, rxTime) {
     NORMAL:  '<span class="badge-safe">NORMAL</span>',
   };
   const badge   = badges[status] || ('<span class="badge-safe">' + status + "</span>");
-  const prob    = r.fire_probability != null ? (r.fire_probability * 100).toFixed(1) + "%" : "—";
+  const prob    = r.raw_probability != null ? (r.raw_probability * 100).toFixed(1) + "%" : "—";
   const rssiSnr = (r.lora_rssi != null ? r.lora_rssi : "—") + " / " + (r.lora_snr != null ? r.lora_snr : "—");
 
   const tr = document.createElement("tr");
@@ -1173,7 +1151,7 @@ function prependNodeBHistoryRow(r, rxTime) {
     "<td>" + badge + "</td>" +
     "<td class='text-mono'>" + prob + "</td>" +
     "<td class='text-mono'>" + (r.trend || "—") + "</td>" +
-    "<td class='text-mono'>" + (r.temperature != null ? r.temperature.toFixed(1) : "—") + "</td>" +
+    "<td class='text-mono'>" + (r.temp != null ? r.temp.toFixed(1) : "—") + "</td>" +
     "<td class='text-mono'>" + (r.humidity    != null ? r.humidity.toFixed(1) + "%" : "—") + "</td>" +
     "<td class='text-mono'>" + (r.mq2         != null ? Math.round(r.mq2) : "—") + "</td>" +
     "<td class='text-mono'>" + rssiSnr + "</td>";
