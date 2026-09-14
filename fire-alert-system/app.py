@@ -297,34 +297,59 @@ def receive_sensor_data():
     if not data:
         return jsonify({"status": "error", "message": "Invalid JSON"}), 400
 
-    api_key = request.headers.get("X-ESP32-API-Key")
-    if config.ESP32_API_KEY and api_key != config.ESP32_API_KEY:
-        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    # Verify API Key from headers (case-insensitive) or JSON body
+    api_key = (
+        request.headers.get("X-ESP32-API-Key")
+        or request.headers.get("x-esp32-api-key")
+        or request.headers.get("X-API-Key")
+        or data.get("api_key")
+        or data.get("esp32_api_key")
+    )
+    if config.ESP32_API_KEY and config.ESP32_API_KEY != "change-this-secret":
+        if api_key != config.ESP32_API_KEY:
+            return jsonify({"status": "error", "message": "Unauthorized: Invalid or missing X-ESP32-API-Key"}), 401
 
     try:
-        esp_status = data.get("status", "NORMAL")
-        # Map prediction based on status string (worker expects "FIRE")
-        prediction = "FIRE" if "FIRE" in esp_status.upper() else "NOT FIRE"
+        esp_status = str(data.get("status", data.get("fire_status", "NORMAL")))
+        
+        # Risk probability handling (supports smoothed_probability, risk_probability, fire_probability, confidence)
+        prob_input = float(data.get("smoothed_probability", data.get("risk_probability", data.get("fire_probability", data.get("confidence", 0.0)))))
+        confidence = prob_input * 100.0 if prob_input <= 1.0 else prob_input
+        
+        raw_prob = float(data.get("raw_probability", data.get("risk_probability", prob_input)))
+        if raw_prob > 1.0:
+            raw_prob /= 100.0
+
+        # Determine prediction
+        prediction = data.get("prediction")
+        if not prediction:
+            prediction = "FIRE" if ("FIRE" in esp_status.upper() or confidence >= 70.0) else "NOT FIRE"
+
+        pkt_id = data.get("packet_id")
+        if pkt_id is None:
+            pkt_id = int(time.time() % 100000)
+
+        node_ts = data.get("node_timestamp", data.get("node_ts", int(time.time() * 1000)))
 
         event = {
             "type": "reading",
-            "temp": float(data.get("temperature", 0.0)),
-            "humidity": float(data.get("humidity", 0.0)),
-            "mq2": float(data.get("mq2", 0.0)),
+            "temp": float(data.get("temperature", data.get("temp", 0.0))),
+            "humidity": float(data.get("humidity", data.get("hum", 0.0))),
+            "mq2": float(data.get("mq2", data.get("gas", 0.0))),
             "temp_rate": float(data.get("temp_rate", 0.0)),
             "mq2_rate": float(data.get("mq2_rate", 0.0)),
-            "delta": 0.0,
-            "confidence": float(data.get("smoothed_probability", 0.0)) * 100,
-            "raw_probability": float(data.get("raw_probability", 0.0)),
+            "delta": float(data.get("delta", 0.0)),
+            "confidence": round(confidence, 1),
+            "raw_probability": round(raw_prob, 3),
             "trend": str(data.get("trend", "—")),
             "fire_status": esp_status,
             "prediction": prediction,
-            "safety_suppressed": False,
-            "node_id": str(data.get("node_id", "ESP32-NODE")),
-            "rssi": float(data.get("rssi", 0.0)),
-            "snr": float(data.get("snr", 0.0)),
-            "packet_id": data.get("packet_id"),
-            "node_timestamp": data.get("node_timestamp"),
+            "safety_suppressed": bool(data.get("safety_suppressed", False)),
+            "node_id": str(data.get("node_id", "ESP32-NODE-B")),
+            "rssi": float(data.get("rssi", data.get("lora_rssi", 0.0))),
+            "snr": float(data.get("snr", data.get("lora_snr", 0.0))),
+            "packet_id": pkt_id,
+            "node_timestamp": node_ts,
             "timestamp": datetime.now(timezone.utc).isoformat()
         }
     except (ValueError, TypeError) as e:
@@ -337,7 +362,8 @@ def receive_sensor_data():
         log.warning("Event queue full, dropping ESP32 HTTP reading")
         return jsonify({"status": "error", "message": "Queue full"}), 503
 
-    return jsonify({"status": "ok", "message": "Data received"}), 200
+    return jsonify({"status": "ok", "message": "Data received", "packet_id": pkt_id}), 200
+
 
 
 # ---------------------------------------------------------------------------
@@ -545,7 +571,9 @@ def main():
     reader.start()
 
     # 4. Start Flask HTTP Server
-    log.info(f"Dashboard available at http://localhost:{args.port}")
+    log.info(f"Dashboard available at: http://localhost:{args.port}")
+    log.info(f"Network / Wi-Fi Access: http://10.29.159.211:{args.port}")
+    log.info(f"ESP32 Telemetry Target: http://10.29.159.211:{args.port}/api/sensor-data")
     app.run(
         host=config.FLASK_HOST,
         port=args.port,
