@@ -1027,18 +1027,31 @@ function resetNodeBTimer() {
 // Hook into existing SSE dispatcher for real-time push updates
 // ---------------------------------------------------------------------------
 const _origHandleStreamPayload = handleStreamPayload;
-// Re-define handleStreamPayload so SSE-pushed new_reading events from ESP32 route to Node B
+// Re-define handleStreamPayload so SSE-pushed fire/new_reading events from
+// the ESP32 Unified Node B are routed to the PyroWatch Node B section.
 function handleStreamPayload(data) {          // eslint-disable-line no-redeclare
-  if (data.type === "new_reading" && data.event && data.event.packet_id !== undefined) {
-    // This is an ESP32 event mapped to the reading format
-    renderNodeBReading(data.event, true);
+  const ev = data.event || data.data || data;
+  
+  // Detect Node B unified / ESP32-sourced fire event:
+  //   - type "new_reading" or "fire"
+  //   - has a packet_id (from Node B HTTP POST)
+  //   - has fire_status or fire_probability (unified payload markers)
+  const isNodeBFireEvent = (
+    (data.type === "new_reading" || data.type === "fire") &&
+    ev.packet_id !== undefined &&
+    (ev.fire_status !== undefined || ev.fire_probability !== undefined || ev.confidence !== undefined)
+  );
+
+  if (isNodeBFireEvent) {
+    // Route to Node B fire section
+    renderNodeBReading(ev, true);
     resetNodeBTimer();
     
-    // Also trigger master status alert if FIRE
-    const isSuppressed = !!data.event.safety_suppressed;
-    updateMasterStatus(data.event.prediction, isSuppressed, data.event.confidence, new Date().toLocaleTimeString());
+    // Mirror FIRE state to master status card if critical
+    const isSuppressed = !!ev.safety_suppressed;
+    updateMasterStatus(ev.prediction, isSuppressed, ev.confidence, new Date().toLocaleTimeString());
     
-    // Node A chart/metrics should NOT be updated by ESP32 HTTP data, so we don't call _origHandleStreamPayload
+    // Node B events should NOT update Node A's SSE chart/metrics
     return;
   }
   
@@ -1094,14 +1107,18 @@ function renderNodeBReading(r, isNew) {
   };
 
   // --- Sensor metric cards ---
-  if (r.temp != null) setEl("nodeBTemp",     r.temp.toFixed(1));
-  if (r.humidity    != null) setEl("nodeBHum",      r.humidity.toFixed(1));
-  if (r.mq2         != null) setEl("nodeBMQ2",      Math.round(r.mq2));
-  if (r.temp_rate   != null) setEl("nodeBTempRate", "Rate: " + (r.temp_rate >= 0 ? "+" : "") + r.temp_rate.toFixed(3) + "°C/s");
-  if (r.mq2_rate    != null) setEl("nodeBMQ2Rate",  "Rate: " + (r.mq2_rate  >= 0 ? "+" : "") + r.mq2_rate.toFixed(2)  + "/s");
+  // Support both 'temp' (legacy) and 'temperature' (unified) keys
+  const _temp = r.temp != null ? r.temp : (r.temperature != null ? r.temperature : null);
+  if (_temp     != null) setEl("nodeBTemp",     _temp.toFixed(1));
+  if (r.humidity!= null) setEl("nodeBHum",      r.humidity.toFixed(1));
+  if (r.mq2     != null) setEl("nodeBMQ2",      Math.round(r.mq2));
+  if (r.temp_rate != null && r.temp_rate !== 0) setEl("nodeBTempRate", "Rate: " + (r.temp_rate >= 0 ? "+" : "") + r.temp_rate.toFixed(3) + "°C/s");
+  if (r.mq2_rate  != null && r.mq2_rate  !== 0) setEl("nodeBMQ2Rate",  "Rate: " + (r.mq2_rate  >= 0 ? "+" : "") + r.mq2_rate.toFixed(2)  + "/s");
 
   // --- SVG Probability Gauge ---
-  const probPct  = r.raw_probability != null ? Math.max(0, Math.min(1, r.raw_probability)) : 0;
+  // Unified NodeB: raw_probability (0.0-1.0), legacy: same
+  const probPct  = r.raw_probability != null ? Math.max(0, Math.min(1, r.raw_probability)) :
+                   (r.fire_probability != null ? Math.max(0, Math.min(1, r.fire_probability)) : 0);
   const gaugeArc = document.getElementById("nodeBGaugeArc");
   if (gaugeArc) {
     gaugeArc.setAttribute("stroke-dashoffset", (GAUGE_FULL * (1 - probPct)).toFixed(1));
@@ -1110,12 +1127,14 @@ function renderNodeBReading(r, isNew) {
   setEl("nodeBFireProb", (probPct * 100).toFixed(1) + "%");
 
   // --- LoRa Signal Quality ---
-  if (r.lora_rssi != null) setEl("nodeBRSSI", r.lora_rssi);
-  if (r.lora_snr  != null) setEl("nodeBSNR",  r.lora_snr);
+  // Unified Node B uses 'rssi'/'snr'; legacy uses 'lora_rssi'/'lora_snr'
+  const rssiVal = r.rssi != null ? r.rssi : (r.lora_rssi != null ? r.lora_rssi : null);
+  const snrVal  = r.snr  != null ? r.snr  : (r.lora_snr  != null ? r.lora_snr  : null);
+  if (rssiVal != null) setEl("nodeBRSSI", rssiVal);
+  if (snrVal  != null) setEl("nodeBSNR",  snrVal);
   const qualityEl = document.getElementById("nodeBSignalQuality");
-  if (qualityEl) {
-    const rssi = r.lora_rssi || 0;
-    const qual = rssi >= -60 ? "Excellent" : rssi >= -75 ? "Good" : rssi >= -90 ? "Fair" : "Weak";
+  if (qualityEl && rssiVal != null) {
+    const qual = rssiVal >= -60 ? "Excellent" : rssiVal >= -75 ? "Good" : rssiVal >= -90 ? "Fair" : "Weak";
     qualityEl.textContent = "Signal quality: " + qual;
   }
 
@@ -1168,7 +1187,10 @@ function prependNodeBHistoryRow(r, rxTime) {
   };
   const badge   = badges[status] || ('<span class="badge-safe">' + status + "</span>");
   const prob    = r.raw_probability != null ? (r.raw_probability * 100).toFixed(1) + "%" : "—";
-  const rssiSnr = (r.lora_rssi != null ? r.lora_rssi : "—") + " / " + (r.lora_snr != null ? r.lora_snr : "—");
+  // Unified Node B uses rssi/snr; legacy uses lora_rssi/lora_snr
+  const _rssi = r.rssi != null ? r.rssi : (r.lora_rssi != null ? r.lora_rssi : "—");
+  const _snr  = r.snr  != null ? r.snr  : (r.lora_snr  != null ? r.lora_snr  : "—");
+  const rssiSnr = _rssi + " / " + _snr;
 
   const tr = document.createElement("tr");
   if (status === "FIRE")    tr.className = "row-fire";
@@ -1180,7 +1202,7 @@ function prependNodeBHistoryRow(r, rxTime) {
     "<td>" + badge + "</td>" +
     "<td class='text-mono'>" + prob + "</td>" +
     "<td class='text-mono'>" + (r.trend || "—") + "</td>" +
-    "<td class='text-mono'>" + (r.temp != null ? r.temp.toFixed(1) : "—") + "</td>" +
+    "<td class='text-mono'>" + (r.temp != null ? r.temp.toFixed(1) : (r.temperature != null ? r.temperature.toFixed(1) : "—")) + "</td>" +
     "<td class='text-mono'>" + (r.humidity    != null ? r.humidity.toFixed(1) + "%" : "—") + "</td>" +
     "<td class='text-mono'>" + (r.mq2         != null ? Math.round(r.mq2) : "—") + "</td>" +
     "<td class='text-mono'>" + rssiSnr + "</td>";

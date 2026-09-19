@@ -326,6 +326,11 @@ def sse_stream():
 def receive_sensor_data():
     """
     Receive telemetry directly from ESP32 via Wi-Fi/HTTP.
+
+    Dispatch logic:
+      1. Unified payload  (fire_status + soil_moisture)  → _handle_unified_payload()
+      2. Landslide-only   (soil_moisture only)           → _handle_landslide_payload()
+      3. Fire-only        (legacy serial-reader events)  → inline fire handler
     """
     if not request.is_json:
         return jsonify({"status": "error", "message": "Content-Type must be application/json"}), 400
@@ -335,12 +340,21 @@ def receive_sensor_data():
         return jsonify({"status": "error", "message": "Invalid JSON"}), 400
 
     # -----------------------------------------------------------------------
-    # DISPATCH: Route to landslide handler if soil_moisture key is present
+    # DISPATCH: Detect UNIFIED payload from Unified_NodeB.ino
+    # A unified packet carries BOTH fire_status/fire_probability AND
+    # soil_moisture/landslide_status keys.
     # -----------------------------------------------------------------------
-    if "soil_moisture" in data:
+    has_fire_data      = "fire_status" in data or "fire_probability" in data
+    has_landslide_data = "soil_moisture" in data
+
+    if has_fire_data and has_landslide_data:
+        # UNIFIED payload — enqueue both pipelines from one packet
+        return _handle_unified_payload(data)
+
+    if has_landslide_data:
         return _handle_landslide_payload(data)
 
-    # Verify API Key from headers (case-insensitive) or JSON body for fire nodes
+    # ── Fire-only / legacy payload ──────────────────────────────────────────
     api_key = (
         request.headers.get("X-ESP32-API-Key")
         or request.headers.get("x-esp32-api-key")
@@ -354,16 +368,14 @@ def receive_sensor_data():
 
     try:
         esp_status = str(data.get("status", data.get("fire_status", "NORMAL")))
-        
-        # Risk probability handling (supports smoothed_probability, risk_probability, fire_probability, confidence)
+
         prob_input = float(data.get("smoothed_probability", data.get("risk_probability", data.get("fire_probability", data.get("confidence", 0.0)))))
         confidence = prob_input * 100.0 if prob_input <= 1.0 else prob_input
-        
+
         raw_prob = float(data.get("raw_probability", data.get("risk_probability", prob_input)))
         if raw_prob > 1.0:
             raw_prob /= 100.0
 
-        # Determine prediction
         prediction = data.get("prediction")
         if not prediction:
             prediction = "FIRE" if ("FIRE" in esp_status.upper() or confidence >= 70.0) else "NOT FIRE"
@@ -375,32 +387,36 @@ def receive_sensor_data():
         node_ts = data.get("node_timestamp", data.get("node_ts", int(time.time() * 1000)))
 
         event = {
-            "type": "reading",
-            "temp": float(data.get("temperature", data.get("temp", 0.0))),
-            "humidity": float(data.get("humidity", data.get("hum", 0.0))),
-            "mq2": float(data.get("mq2", data.get("gas", 0.0))),
-            "temp_rate": float(data.get("temp_rate", 0.0)),
-            "mq2_rate": float(data.get("mq2_rate", 0.0)),
-            "delta": float(data.get("delta", 0.0)),
-            "confidence": round(confidence, 1),
-            "raw_probability": round(raw_prob, 3),
-            "trend": str(data.get("trend", "—")),
-            "fire_status": esp_status,
-            "prediction": prediction,
+            "type":              "reading",
+            "temp":              float(data.get("temperature", data.get("temp", 0.0))),
+            "humidity":          float(data.get("humidity", data.get("hum", 0.0))),
+            "mq2":               float(data.get("mq2", data.get("gas", 0.0))),
+            "temp_rate":         float(data.get("temp_rate", 0.0)),
+            "mq2_rate":          float(data.get("mq2_rate", 0.0)),
+            "delta":             float(data.get("delta", 0.0)),
+            "confidence":        round(confidence, 1),
+            "raw_probability":   round(raw_prob, 3),
+            "trend":             str(data.get("trend", "—")),
+            "fire_status":       esp_status,
+            "prediction":        prediction,
             "safety_suppressed": bool(data.get("safety_suppressed", False)),
-            "node_id": str(data.get("node_id", "ESP32-NODE-B")),
-            "rssi": float(data.get("rssi", data.get("lora_rssi", 0.0))),
-            "snr": float(data.get("snr", data.get("lora_snr", 0.0))),
-            "packet_id": pkt_id,
-            "node_timestamp": node_ts,
-            "timestamp": datetime.now(timezone.utc).isoformat()
+            "node_id":           str(data.get("node_id", "ESP32-NODE-B")),
+            "rssi":              float(data.get("rssi", data.get("lora_rssi", 0.0))),
+            "snr":               float(data.get("snr", data.get("lora_snr", 0.0))),
+            "packet_id":         pkt_id,
+            "node_timestamp":    node_ts,
+            "timestamp":         datetime.now(timezone.utc).isoformat(),
         }
     except (ValueError, TypeError) as e:
         return jsonify({"status": "error", "message": f"Invalid field type: {e}"}), 400
 
     try:
         event_queue.put_nowait(event)
-        log.info(f"[ESP32] Node {event['node_id']} | Packet {event['packet_id']} | Temp {event['temp']}C | Hum {event['humidity']}% | MQ2 {event['mq2']} | Risk {event['confidence']:.1f}% | {event['trend']} | {event['fire_status']}")
+        log.info(
+            f"[ESP32] Node {event['node_id']} | Packet {event['packet_id']} | "
+            f"Temp {event['temp']}C | Hum {event['humidity']}% | MQ2 {event['mq2']} | "
+            f"Risk {event['confidence']:.1f}% | {event['trend']} | {event['fire_status']}"
+        )
     except queue.Full:
         log.warning("Event queue full, dropping ESP32 HTTP reading")
         return jsonify({"status": "error", "message": "Queue full"}), 503
@@ -408,36 +424,146 @@ def receive_sensor_data():
     return jsonify({"status": "ok", "message": "Data received", "packet_id": pkt_id}), 200
 
 
+def _handle_unified_payload(data: dict):
+    """
+    Handle a UNIFIED telemetry payload from Unified_NodeB.ino.
+
+    The Node B unified sketch POSTs a single JSON containing data for BOTH
+    the Forest Fire pipeline AND the Landslide pipeline. This function splits
+    it into two events enqueued separately so both dashboard tabs update live.
+
+    Unified JSON keys (from Unified_NodeB.ino forwardTelemetryToCloud):
+      node_id, packet_id, temperature, humidity, mq2,
+      soil_moisture, tilt_angle, vibration,
+      fire_probability, fire_status,
+      landslide_probability, landslide_status,
+      status, smoothed_probability, rssi, snr
+    """
+    pkt_id    = data.get("packet_id") or int(time.time() % 100000)
+    node_id   = str(data.get("node_id", "NODE_B"))
+    rssi      = float(data.get("rssi", 0.0))
+    snr       = float(data.get("snr", 0.0))
+    timestamp = datetime.now(timezone.utc).isoformat()
+
+    errors = []
+
+    # ── FIRE EVENT ──────────────────────────────────────────────────────────
+    try:
+        fire_status = str(data.get("fire_status", "NORMAL")).upper()
+        fire_prob   = float(data.get("fire_probability", 0.0))
+        # fire_probability from Node B is normalised 0.0–1.0
+        fire_confidence = fire_prob * 100.0 if fire_prob <= 1.0 else fire_prob
+        fire_raw_prob   = fire_prob if fire_prob <= 1.0 else fire_prob / 100.0
+        prediction      = "FIRE" if ("FIRE" in fire_status or fire_confidence >= 70.0) else "NOT FIRE"
+
+        fire_event = {
+            "type":              "reading",
+            "temp":              float(data.get("temperature", 0.0)),
+            "humidity":          float(data.get("humidity", 0.0)),
+            "mq2":               float(data.get("mq2", 0.0)),
+            "temp_rate":         0.0,
+            "mq2_rate":          0.0,
+            "delta":             0.0,
+            "confidence":        round(fire_confidence, 1),
+            "raw_probability":   round(fire_raw_prob, 4),
+            "trend":             str(data.get("trend", "STABLE")),
+            "fire_status":       fire_status,
+            "prediction":        prediction,
+            "safety_suppressed": False,
+            "node_id":           node_id,
+            "rssi":              rssi,
+            "snr":               snr,
+            "packet_id":         pkt_id,
+            "node_timestamp":    int(time.time() * 1000),
+            "timestamp":         timestamp,
+        }
+        event_queue.put_nowait(fire_event)
+        log.info(
+            f"[UNIFIED/FIRE] {node_id} | Pkt {pkt_id} | "
+            f"Temp {fire_event['temp']}°C | MQ2 {fire_event['mq2']} | "
+            f"Fire Risk {fire_confidence:.1f}% | {fire_status}"
+        )
+    except (ValueError, TypeError, queue.Full) as e:
+        errors.append(f"fire: {e}")
+        log.warning(f"[UNIFIED] Could not enqueue fire event: {e}")
+
+    # ── LANDSLIDE EVENT ─────────────────────────────────────────────────────
+    try:
+        ls_status  = str(data.get("landslide_status", data.get("status", "NORMAL")))
+        ls_prob    = float(data.get("landslide_probability", data.get("smoothed_probability", 0.0)))
+        ls_smooth  = ls_prob if ls_prob <= 1.0 else ls_prob / 100.0
+        ls_raw     = ls_smooth  # Node B already applies 5-sample rolling average
+
+        landslide_event = {
+            "type":                 "landslide_reading",
+            "node_id":              node_id,
+            "packet_id":            pkt_id,
+            "node_ts":              int(time.time() * 1000),
+            "soil_moisture":        float(data.get("soil_moisture", 0.0)),
+            "tilt_angle":           float(data.get("tilt_angle", 0.0)),
+            "vibration":            float(data.get("vibration", 0.0)),
+            "soil_rate":            0.0,
+            "tilt_rate":            0.0,
+            "raw_probability":      round(ls_raw, 4),
+            "smoothed_probability": round(ls_smooth, 4),
+            "trend":                str(data.get("trend", "STABLE")),
+            "status":               ls_status,
+            "rssi":                 rssi,
+            "snr":                  snr,
+            "timestamp":            timestamp,
+        }
+        event_queue.put_nowait(landslide_event)
+        log.info(
+            f"[UNIFIED/LAND] {node_id} | Pkt {pkt_id} | "
+            f"Soil {landslide_event['soil_moisture']} ADC | "
+            f"Tilt {landslide_event['tilt_angle']}° | "
+            f"Risk {ls_smooth * 100:.1f}% | {ls_status}"
+        )
+    except (ValueError, TypeError, queue.Full) as e:
+        errors.append(f"landslide: {e}")
+        log.warning(f"[UNIFIED] Could not enqueue landslide event: {e}")
+
+    if errors:
+        return jsonify({"status": "partial", "message": f"Errors: {errors}", "packet_id": pkt_id}), 207
+
+    return jsonify({
+        "status":    "ok",
+        "message":   "Unified dual-hazard telemetry received",
+        "packet_id": pkt_id,
+        "pipelines": ["fire", "landslide"],
+    }), 200
+
+
 def _handle_landslide_payload(data: dict):
     """
-    Parse and enqueue a landslide telemetry payload from ESP32 Node B.
-    Called from receive_sensor_data() when 'soil_moisture' key is detected.
+    Parse and enqueue a landslide-only telemetry payload from ESP32 Node B.
+    Called from receive_sensor_data() when only 'soil_moisture' key is detected.
     """
     try:
         pkt_id = data.get("packet_id")
         if pkt_id is None:
             pkt_id = int(time.time() % 100000)
 
-        raw_prob = float(data.get("raw_probability", 0.0))
+        raw_prob      = float(data.get("raw_probability", 0.0))
         smoothed_prob = float(data.get("smoothed_probability", raw_prob))
 
         event = {
-            "type":               "landslide_reading",
-            "node_id":            str(data.get("node_id", "NODE_B")),
-            "packet_id":          pkt_id,
-            "node_ts":            int(data.get("node_ts", int(time.time() * 1000))),
-            "soil_moisture":      float(data.get("soil_moisture", 0.0)),
-            "tilt_angle":         float(data.get("tilt_angle", 0.0)),
-            "vibration":          float(data.get("vibration", 0.0)),
-            "soil_rate":          float(data.get("soil_rate", 0.0)),
-            "tilt_rate":          float(data.get("tilt_rate", 0.0)),
-            "raw_probability":    round(raw_prob, 4),
+            "type":                 "landslide_reading",
+            "node_id":              str(data.get("node_id", "NODE_B")),
+            "packet_id":            pkt_id,
+            "node_ts":              int(data.get("node_ts", int(time.time() * 1000))),
+            "soil_moisture":        float(data.get("soil_moisture", 0.0)),
+            "tilt_angle":           float(data.get("tilt_angle", 0.0)),
+            "vibration":            float(data.get("vibration", 0.0)),
+            "soil_rate":            float(data.get("soil_rate", 0.0)),
+            "tilt_rate":            float(data.get("tilt_rate", 0.0)),
+            "raw_probability":      round(raw_prob, 4),
             "smoothed_probability": round(smoothed_prob, 4),
-            "trend":              str(data.get("trend", "STABLE")),
-            "status":             str(data.get("status", "NORMAL")),
-            "rssi":               float(data.get("rssi", 0.0)),
-            "snr":                float(data.get("snr", 0.0)),
-            "timestamp":          datetime.now(timezone.utc).isoformat(),
+            "trend":                str(data.get("trend", "STABLE")),
+            "status":               str(data.get("status", "NORMAL")),
+            "rssi":                 float(data.get("rssi", 0.0)),
+            "snr":                  float(data.get("snr", 0.0)),
+            "timestamp":            datetime.now(timezone.utc).isoformat(),
         }
     except (ValueError, TypeError) as e:
         return jsonify({"status": "error", "message": f"Invalid landslide field type: {e}"}), 400
