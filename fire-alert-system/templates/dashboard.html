@@ -41,6 +41,7 @@
       </div>
     </div>
 
+    <div class="header-actions">
       <div id="navPhoneBadge" class="badge badge-neutral" title="Emergency SMS Alert Recipient">
         <i data-lucide="phone-call" class="icon-sm"></i>
         <span id="navPhoneText">SMS: Loading...</span>
@@ -63,8 +64,34 @@
     </div>
   </header>
 
+  <!-- Navigation Tab Bar (PyroWatch vs TerraWatch) -->
+  <nav class="sub-nav-tabs" aria-label="Disaster Monitoring Tabs">
+    <div class="tabs-inner">
+      <button id="tabBtnPyro" class="tab-btn active" data-tab="tabPyroWatch" aria-selected="true">
+        <span class="tab-icon-wrap tab-icon-fire"><i data-lucide="flame"></i></span>
+        <span class="tab-label-group">
+          <span class="tab-title">PyroWatch</span>
+          <span class="tab-desc">Forest Fire Monitoring</span>
+        </span>
+        <span id="pyroTabStatusBadge" class="tab-status-chip chip-normal">SAFE</span>
+      </button>
+
+      <button id="tabBtnTerra" class="tab-btn" data-tab="tabTerraWatch" aria-selected="false">
+        <span class="tab-icon-wrap tab-icon-terra"><i data-lucide="mountain"></i></span>
+        <span class="tab-label-group">
+          <span class="tab-title">TerraWatch</span>
+          <span class="tab-desc">Landslide Telemetry (ESP32 Node B)</span>
+        </span>
+        <span id="terraTabStatusBadge" class="tab-status-chip chip-neutral">STANDBY</span>
+      </button>
+    </div>
+  </nav>
+
   <!-- Main Dashboard Container -->
   <main class="dashboard-container">
+
+    <!-- Tab 1: PyroWatch (Fire Monitoring Dashboard) -->
+    <div id="tabPyroWatch" class="tab-panel active">
 
     <!-- Top Hero: Master Status & Vital Metrics -->
     <section class="hero-grid">
@@ -538,6 +565,243 @@
         </table>
       </div>
     </section>
+  </div>
+  <!-- /Tab 1: tabPyroWatch -->
+
+    <!-- Tab 2: TerraWatch (Landslide Telemetry Dashboard) -->
+    <div id="tabTerraWatch" class="tab-panel hidden">
+
+      <!-- TerraWatch Master Status Card -->
+      <section class="tw-hero-section">
+        <div id="twMasterStatusCard" class="card tw-status-card tw-status-safe">
+          <div class="status-card-header">
+            <div id="twStatusRing" class="status-indicator-ring tw-indicator-ring">
+              <i id="twStatusIcon" data-lucide="shield-check" class="status-icon"></i>
+            </div>
+            <div class="status-meta">
+              <div class="tw-badge-row">
+                <span class="status-label">TERRAWATCH SENSOR STATUS</span>
+                <span id="twTrendPill" class="tw-trend-badge tw-trend-stable">TREND: STABLE</span>
+              </div>
+              <h2 id="twStatusHeadline" class="status-headline tw-headline">NORMAL</h2>
+              <p id="twStatusDesc" class="status-desc">All geotechnical telemetry within safe operating baseline thresholds.</p>
+            </div>
+          </div>
+
+          <div class="status-footer tw-status-footer">
+            <div class="status-stat">
+              <span class="stat-caption">AI Hazard Risk</span>
+              <span id="twSmoothedProb" class="stat-number tw-accent-stat">0.0%</span>
+            </div>
+            <div class="status-stat">
+              <span class="stat-caption">Gateway Node</span>
+              <span id="twNodeId" class="stat-number">NODE_B</span>
+            </div>
+            <div class="status-stat">
+              <span class="stat-caption">Packet Sequence</span>
+              <span id="twPacketId" class="stat-number">#—</span>
+            </div>
+            <div class="status-stat">
+              <span class="stat-caption">Node Uptime</span>
+              <span id="twNodeUptime" class="stat-number">—</span>
+            </div>
+            <div class="status-stat">
+              <span class="stat-caption">Last Sync</span>
+              <span id="twLastSync" class="stat-number">Awaiting data</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5 Glassmorphism Metric Cards -->
+      <section class="tw-cards-grid">
+
+        <!-- Card 1: Soil Moisture (ADC) -->
+        <div class="card tw-metric-card" id="cardSoilMoisture">
+          <div class="tw-card-top">
+            <div class="tw-card-title-group">
+              <span class="tw-card-title">Soil Moisture</span>
+              <span class="tw-card-sub">ADC Raw Saturation</span>
+            </div>
+            <div class="tw-icon-box tw-icon-teal">
+              <i data-lucide="droplet"></i>
+            </div>
+          </div>
+          <div class="tw-val-row">
+            <span id="twSoilMoisture" class="tw-metric-val">--.-</span>
+            <span class="tw-metric-unit">ADC</span>
+          </div>
+          <div class="tw-card-footer">
+            <span id="twSoilRate" class="rate-badge">Rate: 0.0 ADC/min</span>
+            <span class="tw-footer-note">Capacitive sensor</span>
+          </div>
+        </div>
+
+        <!-- Card 2: Tilt Angle (Degrees) -->
+        <div class="card tw-metric-card" id="cardTiltAngle">
+          <div class="tw-card-top">
+            <div class="tw-card-title-group">
+              <span class="tw-card-title">Tilt Angle</span>
+              <span class="tw-card-sub">Inclinometer Slope</span>
+            </div>
+            <div class="tw-icon-box tw-icon-amber">
+              <i data-lucide="compass"></i>
+            </div>
+          </div>
+          <div class="tw-val-row">
+            <span id="twTiltAngle" class="tw-metric-val">--.-</span>
+            <span class="tw-metric-unit">°</span>
+          </div>
+          <div class="tw-card-footer">
+            <span id="twTiltRate" class="rate-badge">Rate: 0.0°/min</span>
+            <span class="tw-footer-note">Angular deviation</span>
+          </div>
+        </div>
+
+        <!-- Card 3: Vibration (g-force) -->
+        <div class="card tw-metric-card" id="cardVibration">
+          <div class="tw-card-top">
+            <div class="tw-card-title-group">
+              <span class="tw-card-title">Vibration</span>
+              <span class="tw-card-sub">Dynamic Ground Motion</span>
+            </div>
+            <div class="tw-icon-box tw-icon-rose">
+              <i data-lucide="activity"></i>
+            </div>
+          </div>
+          <div class="tw-val-row">
+            <span id="twVibration" class="tw-metric-val">--.-</span>
+            <span class="tw-metric-unit">g</span>
+          </div>
+          <div class="tw-card-footer">
+            <span id="twVibLevel" class="rate-badge rate-badge-safe">Level: Quiescent</span>
+            <span class="tw-footer-note">Tri-axis magnitude</span>
+          </div>
+        </div>
+
+        <!-- Card 4: AI Hazard Probability (%) -->
+        <div class="card tw-metric-card tw-gauge-card" id="cardHazardProb">
+          <div class="tw-card-top">
+            <div class="tw-card-title-group">
+              <span class="tw-card-title">AI Hazard Probability</span>
+              <span class="tw-card-sub">Real-Time Risk Scoring</span>
+            </div>
+            <div class="tw-icon-box tw-icon-purple">
+              <i data-lucide="shield-alert"></i>
+            </div>
+          </div>
+          <div class="tw-gauge-wrap">
+            <svg class="tw-gauge-svg" viewBox="0 0 120 70" xmlns="http://www.w3.org/2000/svg">
+              <path d="M10 65 A 50 50 0 0 1 110 65" fill="none" stroke="rgba(255,255,255,0.06)" stroke-width="10" stroke-linecap="round"/>
+              <path id="twGaugeArc" d="M10 65 A 50 50 0 0 1 110 65" fill="none" stroke="#14b8a6" stroke-width="10" stroke-linecap="round"
+                stroke-dasharray="157" stroke-dashoffset="157"/>
+            </svg>
+            <div class="tw-gauge-center">
+              <span id="twHazardProb" class="tw-gauge-pct">0%</span>
+              <span class="tw-gauge-sublabel">Smoothed</span>
+            </div>
+          </div>
+          <div class="tw-card-footer tw-gauge-footer">
+            <span class="tw-footer-note">Raw: <strong id="twRawProb">0.0%</strong></span>
+            <span id="twHazardLevelBadge" class="badge-safe">LOW HAZARD</span>
+          </div>
+        </div>
+
+        <!-- Card 5: Gateway RF Signal (RSSI / SNR) -->
+        <div class="card tw-metric-card" id="cardRFSignal">
+          <div class="tw-card-top">
+            <div class="tw-card-title-group">
+              <span class="tw-card-title">Gateway RF Signal</span>
+              <span class="tw-card-sub">ESP32 LoRa Link Quality</span>
+            </div>
+            <div class="tw-icon-box tw-icon-cyan">
+              <i data-lucide="radio"></i>
+            </div>
+          </div>
+          <div class="tw-rf-grid">
+            <div class="tw-rf-col">
+              <span class="tw-rf-label">RSSI</span>
+              <div class="tw-rf-val-row">
+                <span id="twRSSI" class="tw-metric-val-sm">—</span>
+                <span class="tw-metric-unit">dBm</span>
+              </div>
+            </div>
+            <div class="tw-rf-col">
+              <span class="tw-rf-label">SNR</span>
+              <div class="tw-rf-val-row">
+                <span id="twSNR" class="tw-metric-val-sm">—</span>
+                <span class="tw-metric-unit">dB</span>
+              </div>
+            </div>
+          </div>
+          <div class="tw-card-footer">
+            <span id="twRFQuality" class="status-note">Signal link: Standby</span>
+            <span class="tw-footer-note">Wi-Fi Gateway</span>
+          </div>
+        </div>
+
+      </section>
+
+      <!-- Dual-Axis Landslide Chart -->
+      <section class="tw-chart-section">
+        <div class="card tw-chart-card">
+          <div class="card-header">
+            <div class="card-heading-group">
+              <h3 class="card-title"><i data-lucide="trending-up" class="icon-sm"></i> Landslide Geo-Physical Telemetry Stream</h3>
+              <p class="card-sub">Dual-axis tracking: Soil Moisture (Left Y-Axis, Teal) vs. Tilt Angle & Vibration (Right Y-Axis, Amber/Rose)</p>
+            </div>
+            <div class="chart-controls">
+              <span class="live-pulse-dot tw-live-dot"></span>
+              <span class="text-muted text-xs">Live Telemetry</span>
+            </div>
+          </div>
+          <div class="chart-wrapper tw-chart-wrapper">
+            <canvas id="landslideChart"></canvas>
+          </div>
+        </div>
+      </section>
+
+      <!-- Landslide Telemetry & Alert Log Table -->
+      <section class="card tw-table-card">
+        <div class="card-header">
+          <div class="card-heading-group">
+            <h3 class="card-title"><i data-lucide="table" class="icon-sm"></i> Landslide Telemetry & Alert History</h3>
+            <p class="card-sub">Complete rolling log of ESP32 Node B geotechnical packets and real-time hazard classifications</p>
+          </div>
+          <div class="table-legend">
+            <span class="legend-item"><span class="legend-chip chip-fire"></span> Landslide Alert</span>
+            <span class="legend-item"><span class="legend-chip chip-warning"></span> Warning</span>
+            <span class="legend-item"><span class="legend-chip chip-safe"></span> Normal</span>
+          </div>
+        </div>
+
+        <div class="table-wrapper">
+          <table id="landslideEventsTable">
+            <thead>
+              <tr>
+                <th>Timestamp (IST)</th>
+                <th>Packet #</th>
+                <th>Node</th>
+                <th>Status</th>
+                <th>Soil Moisture</th>
+                <th>Tilt Angle</th>
+                <th>Vibration</th>
+                <th>AI Risk</th>
+                <th>Trend</th>
+                <th>RF Signal (RSSI/SNR)</th>
+              </tr>
+            </thead>
+            <tbody id="landslideEventsTableBody">
+              <tr class="empty-row">
+                <td colspan="10">Waiting for live landslide telemetry from Node B...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </div>
+    <!-- /Tab 2: tabTerraWatch -->
 
   </main>
 

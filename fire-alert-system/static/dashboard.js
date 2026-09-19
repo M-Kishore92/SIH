@@ -12,19 +12,30 @@ let telemetryChart = null;
 let eventSource = null;
 let fallbackPollInterval = null;
 
-// Chart Data Buffers
+// Chart Data Buffers (PyroWatch)
 const chartLabels = [];
 const chartTempData = [];
 const chartMQ2Data = [];
+
+// TerraWatch Landslide State & Buffers
+let landslideChart = null;
+const MAX_TW_CHART_POINTS = 35;
+const twChartLabels = [];
+const twSoilData = [];
+const twTiltData = [];
+const twVibData = [];
 
 // ---------------------------------------------------------------------------
 // Initialization
 // ---------------------------------------------------------------------------
 document.addEventListener("DOMContentLoaded", () => {
   initLucide();
+  initTabs();
   initMap();
   initChart();
+  initLandslideChart();
   fetchInitialData();
+  fetchInitialLandslideData();
   fetchRecipients();
   initSSE();
   setupEventListeners();
@@ -102,10 +113,28 @@ function initMap() {
  * @param {string|number} hum
  * @param {string|number} mq2
  */
-function _placeOrUpdateMarker(nodeId, nodeLabel, status, temp, hum, mq2) {
+function _placeOrUpdateMarker(nodeId, nodeLabel, status, val1, val2, val3, isLandslide = false) {
   if (!sensorMap) return;
   const loc = getNodeLocation(nodeId);
   const colors = statusColor(status);
+
+  let rowsHtml = "";
+  if (isLandslide) {
+    rowsHtml = `
+      <tr><td>Status</td><td style="font-weight:700;color:${colors.color};">${status}</td></tr>
+      <tr><td>Soil Moisture</td><td>${val1 != null && val1 !== "—" ? val1 + " ADC" : "—"}</td></tr>
+      <tr><td>Tilt Angle</td><td>${val2 != null && val2 !== "—" ? val2 + "°" : "—"}</td></tr>
+      <tr><td>Vibration</td><td>${val3 != null && val3 !== "—" ? val3 + " g" : "—"}</td></tr>`;
+  } else {
+    const tempStr = val1 != null && val1 !== "—" && !isNaN(Number(val1)) ? Number(val1).toFixed(1) + " °C" : (val1 || "—");
+    const humStr  = val2 != null && val2 !== "—" && !isNaN(Number(val2)) ? Number(val2).toFixed(1) + " %" : (val2 || "—");
+    const mq2Str  = val3 != null && val3 !== "—" && !isNaN(Number(val3)) ? Math.round(Number(val3)) + " ADC" : (val3 || "—");
+    rowsHtml = `
+      <tr><td>Status</td><td style="font-weight:700;color:${colors.color};">${status}</td></tr>
+      <tr><td>Temp</td><td>${tempStr}</td></tr>
+      <tr><td>Humidity</td><td>${humStr}</td></tr>
+      <tr><td>MQ-2</td><td>${mq2Str}</td></tr>`;
+  }
 
   const popupHtml = `
     <div style="font-family:Inter,sans-serif;min-width:180px;">
@@ -114,10 +143,7 @@ function _placeOrUpdateMarker(nodeId, nodeLabel, status, temp, hum, mq2) {
       <span style="font-size:10px;color:#94a3b8;">${loc.address}</span>
       <hr style="border:none;border-top:1px solid #e2e8f0;margin:6px 0;">
       <table style="width:100%;font-size:12px;border-collapse:collapse;">
-        <tr><td>Status</td><td style="font-weight:700;color:${colors.color};">${status}</td></tr>
-        <tr><td>Temp</td><td>${temp !== "—" ? Number(temp).toFixed(1) + " °C" : "—"}</td></tr>
-        <tr><td>Humidity</td><td>${hum !== "—" ? Number(hum).toFixed(1) + " %" : "—"}</td></tr>
-        <tr><td>MQ-2</td><td>${mq2 !== "—" ? Math.round(mq2) + " ADC" : "—"}</td></tr>
+        ${rowsHtml}
       </table>
     </div>`;
 
@@ -390,8 +416,11 @@ function handleStreamPayload(data) {
     if (data.calibration) renderCalibration(data.calibration);
     if (data.phase) renderPhase(data.phase, data.phase_details, data.seconds_remaining);
     if (data.latest_reading) renderReading(data.latest_reading, false);
-  } else if (type === "new_reading") {
-    renderReading(data.event, true);
+    if (data.latest_landslide_reading) renderLandslideReading(data.latest_landslide_reading, false);
+  } else if (type === "new_reading" || type === "fire") {
+    renderReading(data.event || data.data, true);
+  } else if (type === "landslide" || type === "landslide_reading") {
+    renderLandslideReading(data.event || data.data || data, true);
   } else if (type === "safety_suppressed_update") {
     markLatestEventSuppressed();
   } else if (type === "phase_update") {
@@ -1201,3 +1230,490 @@ function formatUptimeMs(ms) {
   if (s < 3600) return Math.floor(s / 60) + "m " + (s % 60) + "s";
   return Math.floor(s / 3600) + "h " + Math.floor((s % 3600) / 60) + "m";
 }
+
+// ===========================================================================
+// TerraWatch (Landslide Telemetry) Tab & Visualization Logic
+// ===========================================================================
+
+/**
+ * Tab switcher between PyroWatch (Fire) and TerraWatch (Landslide)
+ */
+function initTabs() {
+  const tabBtns = document.querySelectorAll(".tab-btn");
+  if (!tabBtns.length) return;
+
+  tabBtns.forEach((btn) => {
+    btn.addEventListener("click", () => {
+      const targetId = btn.getAttribute("data-tab");
+      if (!targetId) return;
+
+      // Update button active state
+      tabBtns.forEach((b) => {
+        b.classList.remove("active");
+        b.setAttribute("aria-selected", "false");
+      });
+      btn.classList.add("active");
+      btn.setAttribute("aria-selected", "true");
+
+      // Toggle panel display
+      document.querySelectorAll(".tab-panel").forEach((panel) => {
+        if (panel.id === targetId) {
+          panel.classList.remove("hidden");
+          panel.classList.add("active");
+        } else {
+          panel.classList.remove("active");
+          panel.classList.add("hidden");
+        }
+      });
+
+      // Resize chart & map on tab activation for sharp crisp rendering
+      if (targetId === "tabTerraWatch" && landslideChart) {
+        setTimeout(() => {
+          landslideChart.resize();
+          landslideChart.update("none");
+        }, 60);
+      } else if (targetId === "tabPyroWatch") {
+        if (sensorMap) {
+          setTimeout(() => sensorMap.invalidateSize(), 60);
+        }
+        if (telemetryChart) {
+          setTimeout(() => {
+            telemetryChart.resize();
+            telemetryChart.update("none");
+          }, 60);
+        }
+      }
+    });
+  });
+}
+
+/**
+ * Initialize dual-axis Chart.js instance for Landslide Telemetry
+ * Left Y-Axis: Soil Moisture (ADC) [Teal]
+ * Right Y-Axis: Tilt Angle (°) [Amber] & Vibration (g) [Rose]
+ */
+function initLandslideChart() {
+  const canvas = document.getElementById("landslideChart");
+  if (!canvas) return;
+
+  const ctx = canvas.getContext("2d");
+  const soilGradient = ctx.createLinearGradient(0, 0, 0, 320);
+  soilGradient.addColorStop(0, "rgba(20, 184, 166, 0.35)");
+  soilGradient.addColorStop(1, "rgba(20, 184, 166, 0.0)");
+
+  landslideChart = new Chart(ctx, {
+    type: "line",
+    data: {
+      labels: twChartLabels,
+      datasets: [
+        {
+          label: "Soil Moisture (ADC)",
+          data: twSoilData,
+          borderColor: "#14b8a6",
+          backgroundColor: soilGradient,
+          borderWidth: 2.5,
+          tension: 0.3,
+          fill: true,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          pointBackgroundColor: "#14b8a6",
+          yAxisID: "ySoil",
+        },
+        {
+          label: "Tilt Angle (°)",
+          data: twTiltData,
+          borderColor: "#f59e0b",
+          backgroundColor: "rgba(245, 158, 11, 0.0)",
+          borderWidth: 2,
+          borderDash: [4, 4],
+          tension: 0.3,
+          fill: false,
+          pointRadius: 3,
+          pointHoverRadius: 6,
+          pointBackgroundColor: "#f59e0b",
+          yAxisID: "yTiltVib",
+        },
+        {
+          label: "Vibration (g)",
+          data: twVibData,
+          borderColor: "#f43f5e",
+          backgroundColor: "rgba(244, 63, 94, 0.0)",
+          borderWidth: 2,
+          tension: 0.3,
+          fill: false,
+          pointRadius: 2.5,
+          pointHoverRadius: 5,
+          pointBackgroundColor: "#f43f5e",
+          yAxisID: "yTiltVib",
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: {
+        mode: "index",
+        intersect: false,
+      },
+      plugins: {
+        legend: {
+          display: true,
+          position: "top",
+          labels: {
+            color: "#94a3b8",
+            font: { family: "Inter", size: 12 },
+            usePointStyle: true,
+            boxWidth: 8,
+          },
+        },
+        tooltip: {
+          backgroundColor: "rgba(15, 23, 42, 0.92)",
+          titleColor: "#f1f5f9",
+          bodyColor: "#94a3b8",
+          borderColor: "rgba(20, 184, 166, 0.25)",
+          borderWidth: 1,
+          padding: 10,
+          usePointStyle: true,
+        },
+      },
+      scales: {
+        x: {
+          grid: { color: "rgba(255, 255, 255, 0.04)" },
+          ticks: {
+            color: "#64748b",
+            font: { family: "JetBrains Mono", size: 10 },
+            maxRotation: 0,
+            autoSkip: true,
+            maxTicksLimit: 8,
+          },
+        },
+        ySoil: {
+          type: "linear",
+          display: true,
+          position: "left",
+          grid: { color: "rgba(255, 255, 255, 0.04)" },
+          ticks: {
+            color: "#2dd4bf",
+            font: { family: "JetBrains Mono", size: 10 },
+          },
+          title: {
+            display: true,
+            text: "Soil Moisture (ADC)",
+            color: "#2dd4bf",
+            font: { size: 11, weight: "600" },
+          },
+        },
+        yTiltVib: {
+          type: "linear",
+          display: true,
+          position: "right",
+          grid: { drawOnChartArea: false },
+          ticks: {
+            color: "#fbbf24",
+            font: { family: "JetBrains Mono", size: 10 },
+          },
+          title: {
+            display: true,
+            text: "Tilt (°) & Vibration (g)",
+            color: "#fbbf24",
+            font: { size: 11, weight: "600" },
+          },
+        },
+      },
+    },
+  });
+}
+
+function pushLandslideChartPoint(timeStr, soil, tilt, vib) {
+  if (!landslideChart) return;
+  twChartLabels.push(timeStr);
+  twSoilData.push(soil);
+  twTiltData.push(tilt);
+  twVibData.push(vib);
+
+  if (twChartLabels.length > MAX_TW_CHART_POINTS) {
+    twChartLabels.shift();
+    twSoilData.shift();
+    twTiltData.shift();
+    twVibData.shift();
+  }
+  landslideChart.update("none");
+}
+
+const LANDSLIDE_HISTORY_MAX = 50;
+
+/**
+ * Prepend a row to the Landslide events table
+ */
+function prependLandslideTableRow(r, rxTime) {
+  const tbody = document.getElementById("landslideEventsTableBody");
+  if (!tbody) return;
+  const emptyRow = tbody.querySelector(".empty-row");
+  if (emptyRow) emptyRow.remove();
+
+  const status = (r.status || "NORMAL").toUpperCase();
+  let statusBadge = '<span class="badge-safe">NORMAL</span>';
+  let rowClass = "";
+  if (status.includes("ALERT")) {
+    statusBadge = '<span class="badge-fire">🚨 LANDSLIDE ALERT</span>';
+    rowClass = "row-landslide-alert";
+  } else if (status.includes("WARN")) {
+    statusBadge = '<span class="badge-warning">⚠ WARNING</span>';
+    rowClass = "row-landslide-warn";
+  }
+
+  const smoothed = r.smoothed_probability != null ? (r.smoothed_probability * 100).toFixed(1) + "%" : "—";
+  const soil = r.soil_moisture != null ? r.soil_moisture.toFixed(1) + " ADC" : "—";
+  const tilt = r.tilt_angle != null ? r.tilt_angle.toFixed(1) + "°" : "—";
+  const vib = r.vibration != null ? r.vibration.toFixed(2) + " g" : "—";
+  const rf = (r.rssi != null ? r.rssi : "—") + " / " + (r.snr != null ? r.snr : "—");
+
+  const tr = document.createElement("tr");
+  if (rowClass) tr.className = rowClass;
+
+  tr.innerHTML =
+    `<td class="text-mono">${rxTime}</td>` +
+    `<td class="text-mono">${r.packet_id != null ? "#" + r.packet_id : "—"}</td>` +
+    `<td class="text-mono">${r.node_id || "NODE_B"}</td>` +
+    `<td>${statusBadge}</td>` +
+    `<td class="text-mono">${soil}</td>` +
+    `<td class="text-mono">${tilt}</td>` +
+    `<td class="text-mono">${vib}</td>` +
+    `<td class="text-mono font-bold">${smoothed}</td>` +
+    `<td class="text-mono">${r.trend || "STABLE"}</td>` +
+    `<td class="text-mono">${rf}</td>`;
+
+  tbody.insertBefore(tr, tbody.firstChild);
+
+  while (tbody.children.length > LANDSLIDE_HISTORY_MAX) {
+    tbody.removeChild(tbody.lastChild);
+  }
+}
+
+/**
+ * Render incoming landslide telemetry frame to the UI
+ */
+function renderLandslideReading(r, isNew) {
+  if (!r) return;
+
+  const timeLabel = r.timestamp
+    ? new Date(r.timestamp).toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+    : new Date().toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" });
+
+  const status = (r.status || "NORMAL").toUpperCase();
+  const isAlert = status.includes("ALERT");
+  const isWarning = status.includes("WARN");
+
+  const setEl = (id, val) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = val;
+  };
+
+  // 1. Master Status Card & Indicator Ring
+  const card = document.getElementById("twMasterStatusCard");
+  const ring = document.getElementById("twStatusRing");
+  const headline = document.getElementById("twStatusHeadline");
+  const desc = document.getElementById("twStatusDesc");
+  const icon = document.getElementById("twStatusIcon");
+  const tabBadge = document.getElementById("terraTabStatusBadge");
+
+  if (card && ring && headline && desc) {
+    card.classList.remove("tw-status-safe", "tw-status-warning", "tw-status-alert");
+    if (isAlert) {
+      card.classList.add("tw-status-alert");
+      headline.textContent = "LANDSLIDE ALERT";
+      desc.textContent = "CRITICAL: Slope instability / ground displacement threshold exceeded! Immediate inspection required.";
+      if (icon) icon.setAttribute("data-lucide", "alert-triangle");
+      if (tabBadge) {
+        tabBadge.className = "tab-status-chip chip-alert";
+        tabBadge.textContent = "ALERT";
+      }
+    } else if (isWarning) {
+      card.classList.add("tw-status-warning");
+      headline.textContent = "WARNING";
+      desc.textContent = "Elevated soil saturation / tilt rate detected. Telemetry trending toward hazard threshold.";
+      if (icon) icon.setAttribute("data-lucide", "alert-circle");
+      if (tabBadge) {
+        tabBadge.className = "tab-status-chip chip-normal";
+        tabBadge.style.background = "rgba(245, 158, 11, 0.18)";
+        tabBadge.style.color = "#fbbf24";
+        tabBadge.textContent = "WARNING";
+      }
+    } else {
+      card.classList.add("tw-status-safe");
+      headline.textContent = "NORMAL";
+      desc.textContent = "All geotechnical telemetry within safe operating baseline thresholds.";
+      if (icon) icon.setAttribute("data-lucide", "shield-check");
+      if (tabBadge) {
+        tabBadge.className = "tab-status-chip chip-normal";
+        tabBadge.style.background = "";
+        tabBadge.style.color = "";
+        tabBadge.textContent = "NORMAL";
+      }
+    }
+  }
+
+  // Trend Pill
+  const trendPill = document.getElementById("twTrendPill");
+  if (trendPill) {
+    const trend = (r.trend || "STABLE").toUpperCase();
+    trendPill.className = "tw-trend-badge";
+    if (trend === "RISING") trendPill.classList.add("tw-trend-rising");
+    else if (trend === "FALLING") trendPill.classList.add("tw-trend-falling");
+    else trendPill.classList.add("tw-trend-stable");
+    trendPill.textContent = `TREND: ${trend}`;
+  }
+
+  // Master Card Footer stats
+  const smoothedProb = r.smoothed_probability != null ? r.smoothed_probability : 0;
+  setEl("twSmoothedProb", (smoothedProb * 100).toFixed(1) + "%");
+  setEl("twNodeId", r.node_id || "NODE_B");
+  setEl("twPacketId", r.packet_id != null ? "#" + r.packet_id : "—");
+  setEl("twNodeUptime", formatUptimeMs(r.node_ts));
+  setEl("twLastSync", timeLabel);
+
+  // 2. 5 Glassmorphism Metric Cards
+  // Soil Moisture
+  if (r.soil_moisture != null) setEl("twSoilMoisture", r.soil_moisture.toFixed(1));
+  const soilRate = r.soil_rate != null ? r.soil_rate : 0;
+  setEl("twSoilRate", `Rate: ${(soilRate >= 0 ? "+" : "") + soilRate.toFixed(1)} ADC/min`);
+
+  // Tilt Angle
+  if (r.tilt_angle != null) setEl("twTiltAngle", r.tilt_angle.toFixed(1));
+  const tiltRate = r.tilt_rate != null ? r.tilt_rate : 0;
+  setEl("twTiltRate", `Rate: ${(tiltRate >= 0 ? "+" : "") + tiltRate.toFixed(2)}°/min`);
+
+  // Vibration
+  if (r.vibration != null) {
+    setEl("twVibration", r.vibration.toFixed(2));
+    const vibLevel = document.getElementById("twVibLevel");
+    if (vibLevel) {
+      if (r.vibration > 1.0) {
+        vibLevel.className = "rate-badge rate-badge-fire";
+        vibLevel.textContent = "Level: Severe Motion";
+      } else if (r.vibration > 0.3) {
+        vibLevel.className = "rate-badge rate-badge-warning";
+        vibLevel.textContent = "Level: Micro-Tremor";
+      } else {
+        vibLevel.className = "rate-badge rate-badge-safe";
+        vibLevel.textContent = "Level: Quiescent";
+      }
+    }
+  }
+
+  // AI Hazard Probability Gauge
+  const rawProb = r.raw_probability != null ? r.raw_probability : smoothedProb;
+  setEl("twHazardProb", (smoothedProb * 100).toFixed(1) + "%");
+  setEl("twRawProb", (rawProb * 100).toFixed(1) + "%");
+
+  const gaugeArc = document.getElementById("twGaugeArc");
+  if (gaugeArc) {
+    const totalLength = 157;
+    const clamped = Math.max(0, Math.min(smoothedProb, 1));
+    const offset = totalLength * (1 - clamped);
+    gaugeArc.style.strokeDashoffset = offset.toFixed(1);
+    if (clamped >= 0.7) {
+      gaugeArc.style.stroke = "#ef4444";
+    } else if (clamped >= 0.4) {
+      gaugeArc.style.stroke = "#f59e0b";
+    } else {
+      gaugeArc.style.stroke = "#14b8a6";
+    }
+  }
+
+  const hazardBadge = document.getElementById("twHazardLevelBadge");
+  if (hazardBadge) {
+    if (smoothedProb >= 0.7) {
+      hazardBadge.className = "badge-fire";
+      hazardBadge.textContent = "HIGH HAZARD";
+    } else if (smoothedProb >= 0.4) {
+      hazardBadge.className = "badge-warning";
+      hazardBadge.textContent = "MODERATE HAZARD";
+    } else {
+      hazardBadge.className = "badge-safe";
+      hazardBadge.textContent = "LOW HAZARD";
+    }
+  }
+
+  // Gateway RF Signal
+  if (r.rssi != null) setEl("twRSSI", Math.round(r.rssi));
+  if (r.snr != null) setEl("twSNR", r.snr.toFixed(1));
+  const elQuality = document.getElementById("twRFQuality");
+  if (elQuality) {
+    if (r.rssi != null && r.rssi >= -80) {
+      elQuality.textContent = "Signal link: Strong Link";
+      elQuality.style.color = "#34d399";
+    } else if (r.rssi != null && r.rssi >= -100) {
+      elQuality.textContent = "Signal link: Good / Stable";
+      elQuality.style.color = "#60a5fa";
+    } else if (r.rssi != null) {
+      elQuality.textContent = "Signal link: Weak / Marginal";
+      elQuality.style.color = "#fbbf24";
+    }
+  }
+
+  // 3. Update Chart
+  if (r.soil_moisture != null && r.tilt_angle != null && r.vibration != null) {
+    pushLandslideChartPoint(timeLabel, r.soil_moisture, r.tilt_angle, r.vibration);
+  }
+
+  // 4. Update Table
+  if (isNew) {
+    prependLandslideTableRow(r, timeLabel);
+  }
+
+  // 5. Update Map Marker for Node B
+  _placeOrUpdateMarker(
+    "nodeB",
+    "Node B (TerraWatch Landslide)",
+    isAlert ? "FIRE" : isWarning ? "WARNING" : "SAFE",
+    r.soil_moisture != null ? r.soil_moisture.toFixed(0) : "—",
+    r.tilt_angle != null ? r.tilt_angle.toFixed(1) : "—",
+    r.vibration != null ? r.vibration.toFixed(2) : "—",
+    true
+  );
+
+  initLucide();
+}
+
+/**
+ * Pre-populate Landslide data from SQLite history
+ */
+async function fetchInitialLandslideData() {
+  try {
+    const res = await fetch("/api/landslide/events?limit=35");
+    if (res.ok) {
+      const data = await res.json();
+      if (data.events && data.events.length > 0) {
+        // Chronological order for chart
+        const chronoEvents = [...data.events].reverse();
+        chronoEvents.forEach((ev) => {
+          const tStr = ev.timestamp
+            ? new Date(ev.timestamp).toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+            : "";
+          if (ev.soil_moisture != null && ev.tilt_angle != null && ev.vibration != null) {
+            twChartLabels.push(tStr);
+            twSoilData.push(ev.soil_moisture);
+            twTiltData.push(ev.tilt_angle);
+            twVibData.push(ev.vibration);
+          }
+        });
+        if (landslideChart) landslideChart.update();
+
+        // Populate table (newest first)
+        data.events.forEach((ev) => {
+          const tStr = ev.timestamp
+            ? new Date(ev.timestamp).toLocaleTimeString([], { hour12: false, hour: "2-digit", minute: "2-digit", second: "2-digit" })
+            : "";
+          prependLandslideTableRow(ev, tStr);
+        });
+
+        // Set current state with newest reading
+        renderLandslideReading(data.events[0], false);
+      }
+    }
+  } catch (err) {
+    console.error("Error fetching initial landslide events:", err);
+  }
+}
+

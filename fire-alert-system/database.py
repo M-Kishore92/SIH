@@ -74,6 +74,25 @@ def init_db():
                 is_active     INTEGER DEFAULT 1,
                 registered_at TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS landslide_events (
+                id                   INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp            TEXT NOT NULL,
+                node_id              TEXT,
+                packet_id            INTEGER,
+                node_ts              INTEGER,
+                soil_moisture        REAL,
+                tilt_angle           REAL,
+                vibration            REAL,
+                soil_rate            REAL,
+                tilt_rate            REAL,
+                raw_probability      REAL,
+                smoothed_probability REAL,
+                trend                TEXT,
+                status               TEXT,
+                rssi                 REAL,
+                snr                  REAL
+            );
         """)
         # Ensure node_id exists if table was created earlier without it
         try:
@@ -312,4 +331,89 @@ def fetch_primary_recipient() -> Optional[str]:
     if recipients:
         return recipients[0]["phone_number"]
     return config.TWILIO_TO_NUMBER or None
+
+
+# ---------------------------------------------------------------------------
+# Landslide Events
+# ---------------------------------------------------------------------------
+
+def insert_landslide_event(event: dict) -> Optional[int]:
+    """
+    Insert a landslide telemetry event into the landslide_events table.
+    Returns the new row id, or None if the event type is wrong.
+    """
+    if event.get("type") != "landslide_reading":
+        return None
+
+    sql = """
+        INSERT INTO landslide_events
+            (timestamp, node_id, packet_id, node_ts,
+             soil_moisture, tilt_angle, vibration,
+             soil_rate, tilt_rate,
+             raw_probability, smoothed_probability,
+             trend, status, rssi, snr)
+        VALUES
+            (:timestamp, :node_id, :packet_id, :node_ts,
+             :soil_moisture, :tilt_angle, :vibration,
+             :soil_rate, :tilt_rate,
+             :raw_probability, :smoothed_probability,
+             :trend, :status, :rssi, :snr)
+    """
+    with _get_conn() as conn:
+        cur = conn.execute(sql, {
+            "timestamp":            event.get("timestamp"),
+            "node_id":              event.get("node_id"),
+            "packet_id":            event.get("packet_id"),
+            "node_ts":              event.get("node_ts"),
+            "soil_moisture":        event.get("soil_moisture"),
+            "tilt_angle":           event.get("tilt_angle"),
+            "vibration":            event.get("vibration"),
+            "soil_rate":            event.get("soil_rate"),
+            "tilt_rate":            event.get("tilt_rate"),
+            "raw_probability":      event.get("raw_probability"),
+            "smoothed_probability": event.get("smoothed_probability"),
+            "trend":                event.get("trend"),
+            "status":               event.get("status"),
+            "rssi":                 event.get("rssi"),
+            "snr":                  event.get("snr"),
+        })
+        row_id = cur.lastrowid
+    log.debug(f"Inserted landslide event id={row_id}, status={event.get('status')}")
+    return row_id
+
+
+def fetch_recent_landslide_events(limit: int = 100) -> list[dict]:
+    """
+    Return the most recent landslide events, newest first.
+    """
+    sql = """
+        SELECT id, timestamp, node_id, packet_id, node_ts,
+               soil_moisture, tilt_angle, vibration,
+               soil_rate, tilt_rate,
+               raw_probability, smoothed_probability,
+               trend, status, rssi, snr
+        FROM landslide_events
+        ORDER BY id DESC
+        LIMIT ?
+    """
+    with _get_conn() as conn:
+        rows = conn.execute(sql, (limit,)).fetchall()
+    return [dict(r) for r in rows]
+
+
+def fetch_latest_landslide_event() -> Optional[dict]:
+    """Return the single most recent landslide reading, or None."""
+    sql = """
+        SELECT id, timestamp, node_id, packet_id, node_ts,
+               soil_moisture, tilt_angle, vibration,
+               soil_rate, tilt_rate,
+               raw_probability, smoothed_probability,
+               trend, status, rssi, snr
+        FROM landslide_events
+        ORDER BY id DESC
+        LIMIT 1
+    """
+    with _get_conn() as conn:
+        row = conn.execute(sql).fetchone()
+    return dict(row) if row else None
 

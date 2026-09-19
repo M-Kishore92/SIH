@@ -2143,3 +2143,539 @@ tr.row-suppressed td {
 /* Ensure Leaflet tile images honour the border-radius of the wrapper */
 .map-wrapper .leaflet-container { border-radius: 8px; }
 
+/* ==========================================================================
+   Tab Navigation (PyroWatch vs TerraWatch)
+   ========================================================================== */
+.sub-nav-tabs {
+  background: rgba(13, 17, 26, 0.75);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border-subtle);
+  padding: 0.75rem 2rem;
+  position: sticky;
+  top: 73px;
+  z-index: 90;
+}
+
+.tabs-inner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.65rem 1.25rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: var(--radius-md);
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  font-family: var(--font-main);
+  text-align: left;
+}
+
+.tab-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: var(--text-main);
+  transform: translateY(-1px);
+}
+
+.tab-btn.active {
+  background: rgba(20, 184, 166, 0.12);
+  border-color: rgba(20, 184, 166, 0.45);
+  color: #f1f5f9;
+  box-shadow: 0 4px 20px rgba(20, 184, 166, 0.15), inset 0 0 12px rgba(20, 184, 166, 0.08);
+}
+
+#tabBtnPyro.tab-btn.active {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.45);
+  color: #f1f5f9;
+  box-shadow: 0 4px 20px rgba(239, 68, 68, 0.15), inset 0 0 12px rgba(239, 68, 68, 0.08);
+}
+
+.tab-icon-wrap {
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+}
+
+.tab-icon-fire {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+}
+
+.tab-icon-terra {
+  background: rgba(20, 184, 166, 0.15);
+  color: #2dd4bf;
+  border: 1px solid rgba(20, 184, 166, 0.25);
+}
+
+.tab-label-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.tab-title {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+.tab-desc {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.tab-status-chip {
+  margin-left: 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+}
+
+.chip-normal {
+  background: rgba(34, 197, 94, 0.15);
+  color: #4ade80;
+  border: 1px solid rgba(34, 197, 94, 0.3);
+}
+
+.chip-neutral {
+  background: rgba(148, 163, 184, 0.12);
+  color: #94a3b8;
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+
+.chip-alert {
+  background: rgba(239, 68, 68, 0.18);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  animation: twSeismicPulse 1.2s infinite;
+}
+
+/* Tab Panels */
+.tab-panel {
+  display: block;
+  animation: tabFadeIn 0.3s ease-out;
+}
+
+.tab-panel.hidden {
+  display: none !important;
+}
+
+@keyframes tabFadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ==========================================================================
+   TerraWatch Landslide Theme & Components
+   ========================================================================== */
+
+/* Hero / Master Status Card */
+.tw-hero-section {
+  margin-bottom: 1.75rem;
+}
+
+.tw-status-card {
+  border-left: 4px solid #14b8a6;
+  background: linear-gradient(135deg, rgba(20, 184, 166, 0.08) 0%, rgba(15, 23, 42, 0.7) 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.tw-status-card::before {
+  content: "";
+  position: absolute;
+  top: 0; right: 0; width: 350px; height: 350px;
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.1) 0%, transparent 70%);
+  pointer-events: none;
+}
+
+.tw-badge-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.35rem;
+}
+
+.tw-trend-badge {
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+}
+
+.tw-trend-stable {
+  background: rgba(20, 184, 166, 0.15);
+  color: #2dd4bf;
+  border: 1px solid rgba(20, 184, 166, 0.3);
+}
+
+.tw-trend-rising {
+  background: rgba(239, 68, 68, 0.18);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+}
+
+.tw-trend-falling {
+  background: rgba(59, 130, 246, 0.18);
+  color: #60a5fa;
+  border: 1px solid rgba(59, 130, 246, 0.4);
+}
+
+.tw-headline {
+  color: #2dd4bf;
+  font-size: 2.2rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin: 0.25rem 0;
+}
+
+.tw-indicator-ring {
+  background: rgba(20, 184, 166, 0.12);
+  border: 2px solid rgba(20, 184, 166, 0.4);
+  color: #2dd4bf;
+  box-shadow: 0 0 25px rgba(20, 184, 166, 0.25);
+}
+
+/* Status variants */
+.tw-status-safe {
+  border-left-color: #14b8a6;
+}
+.tw-status-safe .tw-indicator-ring {
+  border-color: rgba(20, 184, 166, 0.6);
+  color: #2dd4bf;
+}
+.tw-status-safe .tw-headline {
+  color: #2dd4bf;
+}
+
+.tw-status-warning {
+  border-left-color: #f59e0b;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.09) 0%, rgba(15, 23, 42, 0.7) 100%);
+}
+.tw-status-warning .tw-indicator-ring {
+  border-color: rgba(245, 158, 11, 0.6);
+  color: #fbbf24;
+  box-shadow: 0 0 25px rgba(245, 158, 11, 0.3);
+}
+.tw-status-warning .tw-headline {
+  color: #fbbf24;
+}
+
+.tw-status-alert {
+  border-left-color: #ef4444;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(15, 23, 42, 0.8) 100%);
+  animation: twBorderGlow 1.5s ease-in-out infinite;
+}
+.tw-status-alert .tw-indicator-ring {
+  border-color: rgba(239, 68, 68, 0.8);
+  color: #f87171;
+  background: rgba(239, 68, 68, 0.2);
+  box-shadow: 0 0 35px rgba(239, 68, 68, 0.5);
+  animation: twSeismicPulse 1s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+.tw-status-alert .tw-headline {
+  color: #f87171;
+  text-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
+}
+
+@keyframes twSeismicPulse {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 25px rgba(239, 68, 68, 0.4); }
+  50% { transform: scale(1.08); box-shadow: 0 0 40px rgba(239, 68, 68, 0.7); }
+}
+
+@keyframes twBorderGlow {
+  0%, 100% { border-left-color: #ef4444; }
+  50% { border-left-color: #f87171; }
+}
+
+.tw-accent-stat {
+  color: #2dd4bf;
+}
+
+/* 5 Metric Cards Grid */
+.tw-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 1.25rem;
+  margin-bottom: 1.75rem;
+}
+
+.tw-metric-card {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 1.35rem;
+  min-height: 180px;
+  background: rgba(15, 20, 32, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(12px);
+  transition: transform 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.tw-metric-card:hover {
+  transform: translateY(-2px);
+  border-color: rgba(20, 184, 166, 0.3);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.tw-card-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+
+.tw-card-title-group {
+  display: flex;
+  flex-direction: column;
+}
+
+.tw-card-title {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.tw-card-sub {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+.tw-icon-box {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tw-icon-box svg {
+  width: 18px;
+  height: 18px;
+}
+
+.tw-icon-teal   { background: rgba(20, 184, 166, 0.15); color: #2dd4bf; border: 1px solid rgba(20, 184, 166, 0.25); }
+.tw-icon-amber  { background: rgba(245, 158, 11, 0.15); color: #fbbf24; border: 1px solid rgba(245, 158, 11, 0.25); }
+.tw-icon-rose   { background: rgba(244, 63, 94, 0.15);  color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.25); }
+.tw-icon-purple { background: rgba(168, 85, 247, 0.15); color: #c084fc; border: 1px solid rgba(168, 85, 247, 0.25); }
+.tw-icon-cyan   { background: rgba(6, 182, 212, 0.15);  color: #22d3ee; border: 1px solid rgba(6, 182, 212, 0.25); }
+
+.tw-val-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0.4rem 0;
+}
+
+.tw-metric-val {
+  font-family: var(--font-mono);
+  font-size: 1.85rem;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.03em;
+}
+
+.tw-metric-val-sm {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.tw-metric-unit {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.tw-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.tw-footer-note {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+}
+
+/* Gauge styling */
+.tw-gauge-card {
+  align-items: center;
+  text-align: center;
+}
+
+.tw-gauge-card .tw-card-top {
+  width: 100%;
+}
+
+.tw-gauge-wrap {
+  position: relative;
+  width: 120px;
+  height: 65px;
+  margin: 0.25rem auto;
+}
+
+.tw-gauge-svg {
+  width: 120px;
+  height: 65px;
+  overflow: visible;
+}
+
+.tw-gauge-center {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.tw-gauge-pct {
+  font-family: var(--font-mono);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-main);
+  line-height: 1;
+}
+
+.tw-gauge-sublabel {
+  font-size: 0.62rem;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.tw-gauge-footer {
+  width: 100%;
+}
+
+/* RF Signal Grid */
+.tw-rf-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin: 0.35rem 0;
+}
+
+.tw-rf-col {
+  display: flex;
+  flex-direction: column;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+  padding: 0.4rem 0.6rem;
+}
+
+.tw-rf-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.tw-rf-val-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.25rem;
+}
+
+/* Chart */
+.tw-chart-section {
+  margin-bottom: 1.75rem;
+}
+
+.tw-chart-card {
+  border-top: 2px solid rgba(20, 184, 166, 0.5);
+}
+
+.tw-chart-wrapper {
+  height: 340px;
+  position: relative;
+}
+
+.tw-live-dot {
+  background: #14b8a6;
+  box-shadow: 0 0 10px #14b8a6;
+}
+
+/* Tables */
+.tw-table-card {
+  border-top: 2px solid rgba(20, 184, 166, 0.3);
+}
+
+.row-landslide-alert td {
+  background: rgba(239, 68, 68, 0.12) !important;
+  color: #fca5a5;
+}
+
+.row-landslide-alert td:first-child {
+  border-left: 3px solid #ef4444;
+}
+
+.row-landslide-warn td {
+  background: rgba(245, 158, 11, 0.09) !important;
+  color: #fde68a;
+}
+
+.row-landslide-warn td:first-child {
+  border-left: 3px solid #f59e0b;
+}
+
+/* Responsive adjustments for TerraWatch */
+@media (max-width: 1200px) {
+  .tw-cards-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .sub-nav-tabs {
+    padding: 0.5rem 1rem;
+    top: 65px;
+  }
+  .tabs-inner {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  .tab-btn {
+    width: 100%;
+  }
+  .tw-cards-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+

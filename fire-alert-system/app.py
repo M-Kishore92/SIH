@@ -25,7 +25,7 @@ from flask import Flask, Response, jsonify, render_template, request
 import config
 import database
 from serial_reader import MockSerialReader, SerialReader
-from sms_alert import send_fire_sms
+from sms_alert import send_fire_sms, send_landslide_sms
 
 # ---------------------------------------------------------------------------
 # Logging Setup
@@ -58,6 +58,13 @@ system_state = {
     "latest_reading": None,
     "calibration": None,
     "last_event_id": None,
+}
+
+# Landslide monitoring state cache
+landslide_state = {
+    "latest_reading": None,
+    "last_event_id": None,
+    "node_id": None,
 }
 
 
@@ -179,8 +186,9 @@ def event_consumer_worker():
 
                 # Broadcast live reading to connected browsers
                 broadcast_sse({
-                    "type": "new_reading",
+                    "type": "fire",
                     "event": event,
+                    "data": event,
                 })
 
             # 5. Safety Suppression Note (patches previous event)
@@ -194,6 +202,34 @@ def event_consumer_worker():
                     "raw": event.get("raw"),
                     "timestamp": event.get("timestamp"),
                 })
+
+            # 6. Landslide Telemetry Reading
+            elif etype == "landslide_reading":
+                row_id = database.insert_landslide_event(event)
+                event["id"] = row_id
+                landslide_state["last_event_id"] = row_id
+                landslide_state["latest_reading"] = event
+                landslide_state["node_id"] = event.get("node_id")
+
+                # Evaluate landslide SMS alert
+                try:
+                    send_landslide_sms(event)
+                except Exception as ls_err:
+                    log.exception(f"Error evaluating landslide SMS alert: {ls_err}")
+
+                # Broadcast live reading to connected browsers
+                broadcast_sse({
+                    "type": "landslide",
+                    "event": event,
+                    "data": event,
+                })
+                log.info(
+                    f"[LANDSLIDE] Node {event.get('node_id')} | Pkt {event.get('packet_id')} "
+                    f"| Soil {event.get('soil_moisture')} ADC "
+                    f"| Tilt {event.get('tilt_angle')}° "
+                    f"| Risk {(event.get('smoothed_probability', 0) * 100):.1f}% "
+                    f"| {event.get('status')}"
+                )
 
         except Exception as exc:
             log.exception(f"Error processing event in consumer worker: {exc}")
@@ -263,6 +299,7 @@ def sse_stream():
             "mode": system_state["mode"],
             "calibration": system_state["calibration"] or database.fetch_calibration(),
             "latest_reading": system_state["latest_reading"] or database.fetch_latest_event(),
+            "latest_landslide_reading": landslide_state["latest_reading"] or database.fetch_latest_landslide_event(),
         }
         yield f"data: {json.dumps(initial_status)}\n\n"
 
@@ -297,7 +334,13 @@ def receive_sensor_data():
     if not data:
         return jsonify({"status": "error", "message": "Invalid JSON"}), 400
 
-    # Verify API Key from headers (case-insensitive) or JSON body
+    # -----------------------------------------------------------------------
+    # DISPATCH: Route to landslide handler if soil_moisture key is present
+    # -----------------------------------------------------------------------
+    if "soil_moisture" in data:
+        return _handle_landslide_payload(data)
+
+    # Verify API Key from headers (case-insensitive) or JSON body for fire nodes
     api_key = (
         request.headers.get("X-ESP32-API-Key")
         or request.headers.get("x-esp32-api-key")
@@ -365,6 +408,47 @@ def receive_sensor_data():
     return jsonify({"status": "ok", "message": "Data received", "packet_id": pkt_id}), 200
 
 
+def _handle_landslide_payload(data: dict):
+    """
+    Parse and enqueue a landslide telemetry payload from ESP32 Node B.
+    Called from receive_sensor_data() when 'soil_moisture' key is detected.
+    """
+    try:
+        pkt_id = data.get("packet_id")
+        if pkt_id is None:
+            pkt_id = int(time.time() % 100000)
+
+        raw_prob = float(data.get("raw_probability", 0.0))
+        smoothed_prob = float(data.get("smoothed_probability", raw_prob))
+
+        event = {
+            "type":               "landslide_reading",
+            "node_id":            str(data.get("node_id", "NODE_B")),
+            "packet_id":          pkt_id,
+            "node_ts":            int(data.get("node_ts", int(time.time() * 1000))),
+            "soil_moisture":      float(data.get("soil_moisture", 0.0)),
+            "tilt_angle":         float(data.get("tilt_angle", 0.0)),
+            "vibration":          float(data.get("vibration", 0.0)),
+            "soil_rate":          float(data.get("soil_rate", 0.0)),
+            "tilt_rate":          float(data.get("tilt_rate", 0.0)),
+            "raw_probability":    round(raw_prob, 4),
+            "smoothed_probability": round(smoothed_prob, 4),
+            "trend":              str(data.get("trend", "STABLE")),
+            "status":             str(data.get("status", "NORMAL")),
+            "rssi":               float(data.get("rssi", 0.0)),
+            "snr":                float(data.get("snr", 0.0)),
+            "timestamp":          datetime.now(timezone.utc).isoformat(),
+        }
+    except (ValueError, TypeError) as e:
+        return jsonify({"status": "error", "message": f"Invalid landslide field type: {e}"}), 400
+
+    try:
+        event_queue.put_nowait(event)
+    except queue.Full:
+        log.warning("Event queue full, dropping landslide HTTP reading")
+        return jsonify({"status": "error", "message": "Queue full"}), 503
+
+    return jsonify({"status": "ok", "message": "Landslide data received", "packet_id": pkt_id}), 200
 
 # ---------------------------------------------------------------------------
 # SMS Recipients & Testing Endpoints
@@ -490,6 +574,39 @@ def trigger_test_sms():
     except Exception as exc:
         log.exception(f"Error in manual alert trigger: {exc}")
         return jsonify({"status": "error", "message": str(exc)}), 500
+
+
+# ---------------------------------------------------------------------------
+# Landslide REST API Endpoints
+# ---------------------------------------------------------------------------
+
+@app.route("/api/landslide/events")
+def get_landslide_events():
+    """
+    Returns recent landslide events, newest first.
+    Query params: ?limit=100 (default 100, max 500)
+    """
+    limit_arg = request.args.get("limit", default=100, type=int)
+    limit = max(1, min(limit_arg, 500))
+    events = database.fetch_recent_landslide_events(limit=limit)
+    return jsonify({
+        "count": len(events),
+        "events": events,
+    })
+
+
+@app.route("/api/landslide/status")
+def get_landslide_status():
+    """
+    Returns latest landslide reading and state.
+    """
+    latest = landslide_state.get("latest_reading") or database.fetch_latest_landslide_event()
+    return jsonify({
+        "status": "ok",
+        "latest_reading": latest,
+        "node_id": landslide_state.get("node_id"),
+    })
+
 
 
 # ---------------------------------------------------------------------------
